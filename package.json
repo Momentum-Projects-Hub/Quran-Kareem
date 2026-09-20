@@ -1,0 +1,14 @@
+{
+  "name": "quran-fm",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Quran FM 98.2 (Cairo) — bilingual live radio player (web/desktop/mobile)",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

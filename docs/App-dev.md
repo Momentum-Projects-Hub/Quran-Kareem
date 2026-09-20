@@ -4,6 +4,8 @@ Bilingual (Arabic/English) web, desktop, and mobile app streaming إذاعة ا�
 
 > This document supersedes the earlier research notes. Corrections found during verification are called out in **Section 0** because they change the architecture.
 
+> **Status (2026-09-20):** Phase 0 and Phase 1 are implemented — see **Section 12**. Phase 2 (desktop) and Phase 3 (mobile) are stubs only.
+
 ---
 
 ## 0. Findings that change the plan
@@ -60,17 +62,35 @@ Verified with a ranged GET following redirects: the public URL 302-redirects (`L
 ```
 quran-fm/
 ├── packages/
-│   ├── core/                 # framework-agnostic: stream resolution, i18n dict, types
+│   ├── core/                 # @quran-fm/core — framework-agnostic: stream resolution, i18n dict, types
 │   │   └── src/
-│   │       ├── streams.ts        # hardcoded primary stream + fallbacks (see §4)
-│   │       ├── streamResolver.ts # resolve() + health-check logic
-│   │       ├── mp3quran.ts       # generic MP3Quran API client (separate feature, not this station's resolver)
+│   │       ├── streams.ts               # hardcoded primary stream + fallbacks (see §4)
+│   │       ├── streamResolver.ts        # createStreamResolver() — retry/backoff state machine
+│   │       ├── streamResolver.test.ts
+│   │       ├── mp3quran.ts              # generic MP3Quran API client (separate feature, not this station's resolver)
+│   │       ├── mp3quran.test.ts
+│   │       ├── index.ts
 │   │       └── i18n/
 │   │           ├── ar.json
-│   │           └── en.json
-│   ├── web/                  # Vite + React app (also the source Tauri packages)
-│   └── mobile/                # Expo/React Native app
-├── src-tauri/                 # Tauri desktop shell (wraps packages/web build)
+│   │           ├── en.json
+│   │           └── index.ts
+│   ├── web/                  # @quran-fm/web — Vite + React app (also the source Tauri packages)
+│   │   ├── public/           # station-artwork.svg (local, no hotlinked image), _redirects (§6)
+│   │   └── src/
+│   │       ├── i18n/LocaleContext.tsx   # useLocale() — locale + dir persisted to localStorage
+│   │       ├── player/
+│   │       │   ├── usePlayer.ts          # wires core's streamResolver to a real <audio>
+│   │       │   ├── audioAdapter.ts       # HTMLAudioElement -> core AudioAdapter
+│   │       │   ├── EnhancedPlayer.tsx    # main player card UI
+│   │       │   ├── EnhancedPlayer.test.tsx
+│   │       │   ├── EqualizerBars.tsx
+│   │       │   └── OfflineLinks.tsx
+│   │       ├── App.tsx
+│   │       └── main.tsx
+│   └── mobile/                # stub only — see §10, §12 (Phase 3, not yet built)
+├── src-tauri/                 # stub only — see §10, §12 (Phase 2, not yet built)
+├── pnpm-workspace.yaml
+├── package.json
 └── docs/
     └── App-dev.md
 ```
@@ -106,14 +126,27 @@ Resolution order at app launch and on playback failure:
 3. **Give up → offline state**: after retries exhaust, surface a clear "station temporarily unavailable" message with the `EXTERNAL_LISTEN_LINKS` rendered as outbound links (open in browser / system player), not embedded audio.
 4. MP3Quran API (`mp3quran.ts`) is **not** part of this fallback chain — it's a separate, optional "browse other Quran stations" feature that can be added later using the corrected endpoint/shape from §0.
 
+**Implemented** in `packages/core/src/streamResolver.ts`. The actual signature differs slightly from the original sketch: it takes an injected `AudioAdapter` (`{ play(url): Promise<void>; stop(): void }`) rather than owning the `<audio>` element itself, so the same retry/backoff state machine can be reused by an `HTMLAudioElement`-backed adapter on web (`packages/web/src/player/audioAdapter.ts`) and, later, a `react-native-track-player`-backed adapter on mobile without duplicating the logic:
+
 ```ts
-// packages/core/src/streamResolver.ts (shape, not full impl)
+// packages/core/src/streamResolver.ts
 export type StreamState = 'idle' | 'loading' | 'playing' | 'retrying' | 'offline';
 
-export function createStreamResolver(onStateChange: (s: StreamState) => void) {
-  // owns retry count, backoff timer; exposes play()/stop()/getUrl()
+export interface AudioAdapter {
+  play(url: string): Promise<void>;
+  stop(): void;
+}
+
+export function createStreamResolver(options: {
+  adapter: AudioAdapter;
+  station?: Station;
+  onStateChange?: (s: StreamState) => void;
+}): { play(): Promise<void>; stop(): void; getState(): StreamState; getUrl(): string } {
+  // owns retry count, backoff timer (RETRY_BACKOFF_MS = [2000, 5000, 10000])
 }
 ```
+
+Covered by unit tests in `streamResolver.test.ts`: success path, retry-then-succeed, exhaust-retries-to-offline, and `stop()` cancelling pending retries.
 
 `mp3quran.ts` (generic client, corrected per §0):
 
@@ -191,29 +224,31 @@ The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local asse
 - `packages/web`: component test for offline-state rendering (external links shown) and locale/RTL switch.
 - `packages/mobile`: manual test pass on a real device for background audio + lock-screen controls (simulators are unreliable for background audio behavior).
 - Before any release: manually confirm the primary stream URL is still live — live streams do go stale; this is a recurring manual check, not something CI can catch.
+- After every manual Cloudflare Pages deploy (§6): load the live URL and confirm playback actually starts — a static-hosting deploy can silently ship a broken build (e.g. stale cached `index.html` referencing a deleted JS chunk) that only shows up on the hosted URL, not in local dev.
 
 ---
 
 ## 10. Phased roadmap
 
-**Phase 0 — Unblock (must finish first)**
-- ✅ Real Quran FM 98.2 stream URL confirmed: `https://stream.radiojar.com/8s5u5tpdtwzuv` (see §0/§4). Remaining sub-task: smoke-test actual playback in a real `<audio>` element and on a physical mobile device — the `curl` verification confirms the bytes are live audio, not that every browser/OS handles the mid-stream 302 + short-TTL token identically under real playback conditions (buffering/reconnect behavior).
-- Set up the pnpm monorepo skeleton (`packages/core`, `packages/web`, `packages/mobile`, `src-tauri/`).
+**Phase 0 — Unblock (must finish first)** ✅ done
+- ✅ Real Quran FM 98.2 stream URL confirmed: `https://stream.radiojar.com/8s5u5tpdtwzuv` (see §0/§4).
+- ✅ pnpm monorepo skeleton set up (`packages/core`, `packages/web` fully built; `packages/mobile`, `src-tauri/` are placeholder READMEs pending Phase 2/3).
+- ⚠️ Still open: smoke-test actual playback in a real `<audio>` element under real network conditions and on a physical mobile device — the `curl` verification (§0) confirms the bytes are live audio, not that every browser/OS handles the mid-stream 302 + short-TTL token identically (buffering/reconnect behavior). The dev-build smoke test done so far (§12) only confirmed the app compiles and serves; it did not confirm audio actually plays in a real browser.
 
-**Phase 1 — Web MVP**
-- `streamResolver` + `PRIMARY_STREAM` in `core`.
-- Web player UI (play/pause, loading, offline state with external links), bilingual strings, RTL toggle.
-- First manual deploy to Cloudflare Pages (§6) once the MVP build is stable, so it's live and testable on a real URL/device early rather than only locally.
+**Phase 1 — Web MVP** ✅ done
+- ✅ `streamResolver` + `PRIMARY_STREAM` in `core`, unit-tested.
+- ✅ Web player UI (play/pause, loading, offline state with external links), bilingual strings, RTL toggle.
+- ⬜ First manual deploy to Cloudflare Pages (§6) — not done yet, no build has been uploaded.
 
-**Phase 2 — Desktop**
-- Wrap the web build in Tauri; verify audio playback and window packaging on Windows (primary dev platform here).
+**Phase 2 — Desktop** — not started
+- Wrap the web build in Tauri; verify audio playback and window packaging on Windows (primary dev platform here). Only a placeholder `src-tauri/README.md` exists.
 
-**Phase 3 — Mobile**
-- RN app with `react-native-track-player`, background audio, lock-screen metadata, bilingual/RTL.
+**Phase 3 — Mobile** — not started
+- RN app with `react-native-track-player`, background audio, lock-screen metadata, bilingual/RTL. Only a placeholder `packages/mobile/README.md` exists.
 
 **Phase 4 — Polish / stretch**
-- MP3Quran "browse other stations" feature using the corrected API client.
-- Equalizer visuals, theming, system-tray controls on desktop.
+- MP3Quran "browse other stations" feature using the corrected API client (client exists in `core` and is unit-tested, but no UI consumes it yet).
+- Equalizer visuals (✅ CSS-only bars shipped in `EqualizerBars.tsx`), theming, system-tray controls on desktop.
 
 ---
 
@@ -225,6 +260,38 @@ The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local asse
 
 ---
 
+## 12. Implementation status (2026-09-20)
+
+Phase 0 and Phase 1 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
+
+**What's implemented:**
+- `packages/core` (`@quran-fm/core`): `streams.ts`, `streamResolver.ts` (+ tests), `mp3quran.ts` (+ tests), `i18n/{ar,en}.json` + `i18n/index.ts`. All framework-agnostic, no DOM/React deps.
+- `packages/web` (`@quran-fm/web`): Vite + React 19 + TypeScript + Tailwind CSS v4 (via `@tailwindcss/vite`, not a PostCSS config). `EnhancedPlayer` card with play/pause, CSS-animated equalizer bars, bilingual `LocaleContext` (persists to `localStorage`, toggles `<html dir>`/`lang`), offline state rendering `EXTERNAL_LISTEN_LINKS`. `public/_redirects` present for the Cloudflare Pages SPA fallback (§6). Local `station-artwork.svg` used directly — no remote image / `onError` swap needed since there's no remote source to begin with.
+- `packages/mobile` and `src-tauri`: placeholder `README.md` only, per Phase 2/3 scope — not built.
+
+**Deviations from the original plan:**
+- `mp3quran.ts` is not re-exported as a "browse stations" UI feature — only the API client + its tests exist, as scoped for Phase 1.
+- `streamResolver` takes an injected `AudioAdapter` interface (see §4) rather than a bare `onStateChange` callback, so the resolver logic can be reused by a future RN adapter — this is a superset of the original sketch, not a scope change.
+- Package manager: pnpm was not preinstalled in this environment and was installed via `npm install -g pnpm` (approved `esbuild`'s postinstall script through `pnpm approve-builds` / `pnpm-workspace.yaml`'s `allowBuilds`).
+
+**Verification performed:**
+- `pnpm --filter @quran-fm/core test` — 7/7 passing (resolver state machine + mp3quran parsing).
+- `pnpm --filter @quran-fm/web test` — 3/3 passing (offline-links rendering, locale/RTL toggle).
+- `pnpm --filter @quran-fm/web build` — production build succeeds (`tsc -b && vite build`).
+- Dev server (`pnpm --filter @quran-fm/web dev`) smoke-tested via HTTP: `index.html`, `main.tsx`, `App.tsx`, and `station-artwork.svg` all serve/transform without error.
+- **Not yet verified:** actual audio playback in a real browser (no browser automation tool was available in this session) — see the Phase 0 open item above. Before shipping, manually open the dev server and confirm the RadioJar stream plays and the retry/offline UI behaves as expected on a flaky connection.
+
+**How to run:**
+```sh
+pnpm install
+pnpm --filter @quran-fm/core test
+pnpm --filter @quran-fm/web test
+pnpm --filter @quran-fm/web dev     # http://localhost:5173
+pnpm --filter @quran-fm/web build   # outputs packages/web/dist/ for Cloudflare Pages (§6)
+```
+
+---
+
 ## Appendix — original UI reference snippets
 
-The visual direction sketched in the earlier notes (emerald/gold glassmorphism card, CSS-animated equalizer bars, mobile card layout) is worth keeping as the starting design — it's implementation-ready, just needs to be re-pointed at `useStreamResolver()` instead of a hardcoded `<audio src>`/image URL. The original code samples aren't preserved elsewhere (no git repo exists yet for this project) — re-derive the JSX from this plan's descriptions in §5/§6 when building the components, since it's short enough to write directly against the corrected APIs.
+The visual direction sketched in the earlier notes (emerald/gold glassmorphism card, CSS-animated equalizer bars, mobile card layout) was the starting design for `packages/web/src/player/EnhancedPlayer.tsx` (see §12) — implemented there wired to `usePlayer()`/`useStreamResolver()` instead of a hardcoded `<audio src>`/image URL. The original code samples from these notes weren't preserved as-is; the JSX was re-derived from this plan's descriptions in §5/§6 against the corrected APIs.
