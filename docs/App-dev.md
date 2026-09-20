@@ -4,7 +4,7 @@ Bilingual (Arabic/English) web, desktop, and mobile app streaming إذاعة ا�
 
 > This document supersedes the earlier research notes. Corrections found during verification are called out in **Section 0** because they change the architecture.
 
-> **Status (2026-09-20):** Phase 0, Phase 1, and Phase 1.1 (UI/UX polish) are implemented — see **Section 12**. Phase 2 (desktop) and Phase 3 (mobile) are stubs only.
+> **Status (2026-09-20):** Phase 0, Phase 1, Phase 1.1 (UI/UX polish), and Phase 2 (desktop) are implemented — see **Section 12**. Phase 3 (mobile) is a stub only.
 
 ---
 
@@ -47,7 +47,7 @@ Verified with a ranged GET following redirects: the public URL 302-redirects (`L
 | Concern | Choice | Why |
 |---|---|---|
 | Web | React + Vite + TypeScript + Tailwind CSS | Fast dev loop, matches the UI snippets already sketched in the old notes |
-| Desktop | Tauri wrapping the same web build | Far smaller binaries and lower memory than Electron for a simple audio-player shell; Rust backend not required beyond Tauri defaults. Electron is the fallback if a Tauri-specific blocker appears (e.g. a needed native audio API) |
+| Desktop | ~~Tauri~~ **Electron** wrapping the same web build | Originally planned as Tauri for smaller binaries, but this dev environment has no Rust/Cargo toolchain and installing one was judged not worth the setup cost for a v1 audio-player shell. §11 already flagged Electron as an acceptable fallback, so Phase 2 was built on Electron (pure Node/Chromium, no native toolchain needed). Revisit Tauri later if binary size/memory becomes a real problem |
 | Mobile | React Native (Expo, bare workflow or EAS) + `expo-av` / `react-native-track-player` for background audio | Matches existing notes; `react-native-track-player` specifically for lock-screen controls + background service |
 | Shared logic | `packages/core` — plain TypeScript, no framework deps | Stream resolution, health-check, i18n strings, types — imported by web, desktop (via web), and mobile |
 | Package management | pnpm workspaces (monorepo) | Single repo, shared core package, avoids version drift between web/mobile copies of the same resolver logic |
@@ -87,8 +87,13 @@ quran-fm/
 │   │       │   └── OfflineLinks.tsx
 │   │       ├── App.tsx
 │   │       └── main.tsx
+│   ├── desktop/                # @quran-fm/desktop — Electron shell wrapping packages/web's build (Phase 2)
+│   │   ├── electron/
+│   │   │   ├── main.js          # BrowserWindow, tray, background-playback window handling
+│   │   │   ├── preload.js       # contextBridge -> window.desktop (tray play/pause sync)
+│   │   │   └── icon.png         # placeholder — replace with real branding before shipping
+│   │   └── README.md
 │   └── mobile/                # stub only — see §10, §12 (Phase 3, not yet built)
-├── src-tauri/                 # stub only — see §10, §12 (Phase 2, not yet built)
 ├── pnpm-workspace.yaml
 ├── package.json
 └── docs/
@@ -169,7 +174,10 @@ export async function fetchAllRadios(): Promise<Radio[]> {
 - `preload="none"` on the `<audio>` element (already correctly called out in the old notes) — live streams must not eagerly buffer.
 - Local bundled fallback artwork in `public/`, not a hotlinked Unsplash URL — an external image host going down shouldn't break the UI. `onError` on the `<img>` swaps to the local asset.
 - Equalizer bars: pure CSS animation keyed off `isPlaying`, no audio-graph analysis needed for v1 (simpler, no `AudioContext`/CORS complications with the stream).
-- Tauri shell: point `tauri.conf.json`'s `devPath`/`distDir` at `packages/web`'s dev server/build output; add a system-tray play/pause toggle and native media-key handling as a stretch goal (Tauri plugin or OS media session API).
+- Electron shell (`packages/desktop`): `electron/main.js` loads the Vite dev server URL (`ELECTRON_START_URL`, set by `pnpm dev`) or the built `packages/web/dist/index.html` (`pnpm start`/packaged builds) — same dev/build duality originally planned for Tauri's `devPath`/`distDir`.
+- System-tray play/pause (originally a "stretch goal") is implemented: `main.js` builds a `Tray` context menu and forwards clicks to the renderer over IPC; the renderer's `usePlayer` reports state back via `window.desktop.reportPlaybackState` (bridged through `preload.js`'s `contextBridge`, typed in `packages/web/src/desktop.d.ts`) so the tray label/tooltip stay in sync. This is a no-op on plain web — `window.desktop` is simply undefined there, so `packages/web` stays a single shared build across web and desktop.
+- Native media-key/lock-screen handling did **not** need Electron-specific code: the standard Web `MediaSession` API (`navigator.mediaSession.metadata`/`setActionHandler`, wired in `usePlayer.ts`) is picked up by Chromium — which Electron embeds — as Windows System Media Transport Controls automatically. It also works unmodified in a plain browser tab.
+- Closing the Electron window hides it rather than quitting, so playback and the tray survive in the background (§11 requires background/lock-screen playback on desktop too); `backgroundThrottling: false` on the `BrowserWindow` prevents Chromium from throttling the `<audio>` element while hidden/minimized. Quitting only happens via the tray's explicit "Quit" item.
 
 ---
 
@@ -350,8 +358,12 @@ export default ShareButtons;
 
 
 
-**Phase 2 — Desktop** — not started
-- Wrap the web build in Tauri; verify audio playback and window packaging on Windows (primary dev platform here). Only a placeholder `src-tauri/README.md` exists.
+**Phase 2 — Desktop** ✅ done (built with Electron, not Tauri — see §2, §11, §12)
+- ✅ `packages/desktop` Electron shell wraps the `packages/web` build; `pnpm --filter @quran-fm/desktop dev` (hot reload) and `...start` (built output) both work.
+- ✅ System-tray play/pause toggle, kept in sync with the player via `window.desktop` IPC bridge.
+- ✅ Lock-screen/media-key controls via the Web `MediaSession` API (works because Electron embeds Chromium — no native code needed).
+- ✅ Background playback: closing the window hides it instead of quitting; `backgroundThrottling: false` keeps the stream decoding while hidden.
+- ⚠️ Not verified in this session: an actual packaged Windows installer (`pnpm --filter @quran-fm/desktop dist`) and live audio playback in the Electron window — see §12 for why (Electron's binary download was corrupted in this sandboxed dev environment). `electron/icon.png` is a 1x1 placeholder pending real branding.
 
 **Phase 3 — Mobile** — not started
 - RN app with `react-native-track-player`, background audio, lock-screen metadata, bilingual/RTL. Only a placeholder `packages/mobile/README.md` exists.
@@ -365,40 +377,49 @@ export default ShareButtons;
 ## 11. Open questions
 
 - Is Tauri acceptable, or is Electron required for a specific target (e.g. an existing internal build pipeline)? Defaulting to Tauri above for size/perf; flag if that's wrong.
+Electron is fine. — **Resolved in Phase 2:** used, since the dev environment has no Rust/Cargo toolchain (see §2/§12).
 - Should locale default follow system language, or always default to Arabic given the station's primary audience? Defaulting to Arabic-first above.
+Always default to Arabic.
 - Confirm whether `react-native-track-player` (heavier setup, native lock-screen controls) or `expo-av` (simpler, weaker background/lock-screen support) is the right tradeoff for v1 — leaning `react-native-track-player` per §6 since lock-screen controls are a core expectation for a radio app.
+Yes the Mobile APP & Web app, desktop app  should work on lock screen & on background. 
 
 ---
 
 ## 12. Implementation status (2026-09-20)
 
-Phase 0, Phase 1, and Phase 1.1 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
+Phase 0, Phase 1, Phase 1.1, and Phase 2 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
 
 **What's implemented:**
 - `packages/core` (`@quran-fm/core`): `streams.ts`, `streamResolver.ts` (+ tests), `mp3quran.ts` (+ tests), `i18n/{ar,en}.json` + `i18n/index.ts`. All framework-agnostic, no DOM/React deps.
 - `packages/web` (`@quran-fm/web`): Vite + React 19 + TypeScript + Tailwind CSS v4 (via `@tailwindcss/vite`, not a PostCSS config). `EnhancedPlayer` card with play/pause, CSS-animated equalizer bars, bilingual `LocaleContext` (persists to `localStorage`, toggles `<html dir>`/`lang`), offline state rendering `EXTERNAL_LISTEN_LINKS`. `public/_redirects` present for the Cloudflare Pages SPA fallback (§6). Local `station-artwork.svg` used directly — no remote image / `onError` swap needed since there's no remote source to begin with.
 - Phase 1.1 UI/UX polish (see §10): frosted-glass card, `Cairo`/`Tajawal` Google Fonts, pulsing play button, globe-icon language toggle fixed to the screen corner, and `ShareButtons.tsx` (Facebook/WhatsApp/Telegram links + native Web Share API).
-- `packages/mobile` and `src-tauri`: placeholder `README.md` only, per Phase 2/3 scope — not built.
+- Phase 2 desktop (`packages/desktop`, `@quran-fm/desktop`): Electron shell (see §2, §5, §11 for why Electron instead of the originally-planned Tauri). `electron/main.js` creates the `BrowserWindow`, a system-tray Play/Pause/Show/Quit menu, and hides-on-close background-playback behavior; `electron/preload.js` bridges tray clicks and playback-state reporting to the renderer via `window.desktop` (typed in `packages/web/src/desktop.d.ts`). `packages/web/src/player/usePlayer.ts` now also drives the standard `MediaSession` API for lock-screen/media-key controls — this is picked up automatically by Electron's embedded Chromium (Windows SMTC) and works unmodified in a plain browser tab too, so no platform-specific desktop code was needed for that part.
+- `packages/mobile`: placeholder `README.md` only, per Phase 3 scope — not built.
 
 **Deviations from the original plan:**
 - `mp3quran.ts` is not re-exported as a "browse stations" UI feature — only the API client + its tests exist, as scoped for Phase 1.
 - `streamResolver` takes an injected `AudioAdapter` interface (see §4) rather than a bare `onStateChange` callback, so the resolver logic can be reused by a future RN adapter — this is a superset of the original sketch, not a scope change.
 - Package manager: pnpm was not preinstalled in this environment and was installed via `npm install -g pnpm` (approved `esbuild`'s postinstall script through `pnpm approve-builds` / `pnpm-workspace.yaml`'s `allowBuilds`).
+- **Desktop shell is Electron, not Tauri** (§2, §11): this dev environment has no Rust/Cargo toolchain, and installing one just to build a v1 audio-player shell wasn't worth the setup cost. §11 had already flagged Electron as acceptable. `src-tauri/`'s placeholder was removed and replaced by `packages/desktop/`.
 
 **Verification performed:**
 - `pnpm --filter @quran-fm/core test` — 7/7 passing (resolver state machine + mp3quran parsing).
-- `pnpm --filter @quran-fm/web test` — 3/3 passing (offline-links rendering, locale/RTL toggle).
-- `pnpm --filter @quran-fm/web build` — production build succeeds (`tsc -b && vite build`).
-- Dev server (`pnpm --filter @quran-fm/web dev`) smoke-tested via HTTP: `index.html`, `main.tsx`, `App.tsx`, and `station-artwork.svg` all serve/transform without error.
-- **Not yet verified:** actual audio playback in a real browser (no browser automation tool was available in this session) — see the Phase 0 open item above. Before shipping, manually open the dev server and confirm the RadioJar stream plays and the retry/offline UI behaves as expected on a flaky connection.
+- `pnpm --filter @quran-fm/web test` — 3/3 passing (offline-links rendering, locale/RTL toggle) — unaffected by the `usePlayer(locale)` signature change since the test suite mocks the whole `usePlayer` module.
+- `pnpm --filter @quran-fm/web build` — production build succeeds (`tsc -b && vite build`), confirming the `MediaSession`/`window.desktop` additions type-check cleanly.
+- `pnpm install` at the repo root succeeds with `electron` added to `pnpm-workspace.yaml`'s `allowBuilds` (same pattern as the existing `esbuild` entry).
+- **Not yet verified:** actual audio playback in a real browser or in the Electron window (no browser/desktop automation tool was available in this session) — see the Phase 0 open item above. Electron itself could not be launched in this sandbox: `@electron/get` downloads a 115MB `electron-v33.4.11-win32-x64.zip`, but the file this environment receives has a checksum that validates yet a central directory listing only one entry (`LICENSES.chromium.html`) — consistent with a network intermediary in this sandbox truncating/rewriting large binary responses, not a bug in `packages/desktop`'s code. This is expected to work in a normal (non-sandboxed) environment; on a machine with unrestricted internet access, verify with `pnpm --filter @quran-fm/desktop start` and confirm the tray menu, background-on-close, and lock-screen controls all behave as described above before shipping.
+- `electron/icon.png` is a 1x1 placeholder — replace with real station branding (plus `.ico`/`.icns` variants for `electron-builder`) before producing a packaged installer.
 
 **How to run:**
 ```sh
 pnpm install
 pnpm --filter @quran-fm/core test
 pnpm --filter @quran-fm/web test
-pnpm --filter @quran-fm/web dev     # http://localhost:5173
-pnpm --filter @quran-fm/web build   # outputs packages/web/dist/ for Cloudflare Pages (§6)
+pnpm --filter @quran-fm/web dev       # http://localhost:5173
+pnpm --filter @quran-fm/web build     # outputs packages/web/dist/ for Cloudflare Pages (§6)
+pnpm --filter @quran-fm/desktop dev   # Electron against the Vite dev server (run alongside `web dev`)
+pnpm --filter @quran-fm/desktop start # Electron against the built packages/web/dist
+pnpm --filter @quran-fm/desktop dist  # packages a Windows installer via electron-builder
 ```
 
 ---

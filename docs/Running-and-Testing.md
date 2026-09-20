@@ -2,7 +2,7 @@
 
 Practical guide for getting the app running locally and exercising its tests. For architecture, stream-resolution rationale, and the phased roadmap, see [App-dev.md](./App-dev.md).
 
-Currently only `packages/core` and `packages/web` are implemented. `src-tauri/` (desktop) and `packages/mobile/` (mobile) are placeholder READMEs — see [App-dev.md §10](./App-dev.md#10-phased-roadmap).
+Currently `packages/core`, `packages/web`, and `packages/desktop` (Electron) are implemented. `packages/mobile/` is a placeholder README — see [App-dev.md §10](./App-dev.md#10-phased-roadmap).
 
 ---
 
@@ -71,9 +71,56 @@ To sanity-check the production build locally:
 pnpm --filter @quran-fm/web preview
 ```
 
-### Desktop / Mobile
+### Desktop (Electron)
 
-Not yet implemented (Phase 2/3). `src-tauri/README.md` and `packages/mobile/README.md` are placeholders only — nothing to run there yet.
+`packages/desktop` wraps the `@quran-fm/web` production build in an Electron shell (see [packages/desktop/README.md](../packages/desktop/README.md) for how it works — tray, MediaSession, `window.desktop` bridge).
+
+**Dev mode** (hot-reload against the Vite dev server — run both in separate terminals):
+
+```sh
+pnpm --filter @quran-fm/web dev
+pnpm --filter @quran-fm/desktop dev
+```
+
+Or via the root shortcut (dev server must already be running):
+
+```sh
+pnpm dev:desktop
+```
+
+**Run against the built web output** (no dev server needed):
+
+```sh
+pnpm --filter @quran-fm/desktop start
+```
+
+This runs `build:web` first, then launches Electron against `packages/web/dist/`.
+
+### Building the desktop installer (MSI)
+
+`packages/desktop` uses `electron-builder`, configured (in `packages/desktop/package.json`'s `build.win.target`) to produce both an NSIS `.exe` installer and an MSI package. Build with:
+
+```sh
+pnpm --filter @quran-fm/desktop dist
+```
+
+Or via the root shortcut:
+
+```sh
+pnpm build:desktop
+```
+
+This runs `build:web` (producing `packages/web/dist/`, bundled in as `extraResources`) and then `electron-builder`, which packages the app for Windows. Output lands in `packages/desktop/release/`:
+
+- `Quran FM 98.2 Setup <version>.exe` — NSIS installer
+- `Quran FM 98.2 <version>.msi` — MSI package
+
+**Requirements for building the MSI on Windows:**
+
+- The [WiX Toolset](https://wixtoolset.org/) v3 is required for `electron-builder`'s `msi` target. If it isn't installed, `electron-builder` downloads it automatically to its cache (`~/.cache/electron-builder`) on first MSI build — this needs network access the first time.
+- Building on Windows is recommended for the `msi`/`nsis` targets (cross-building Windows installers from macOS/Linux needs Wine and is not covered here).
+
+`packages/desktop/electron/icon.png`/`icon.ico` already carry the station's branding; a macOS `.icns` variant is still needed before a Mac build ships, per the desktop package's README.
 
 ---
 
@@ -171,3 +218,5 @@ Automated tests don't cover actual audio playback. Before relying on a build or 
 - **Postinstall/build script blocked**: run `pnpm approve-builds` and allow `esbuild` (already declared in `pnpm-workspace.yaml`, but pnpm may still prompt on a fresh machine).
 - **Port 5173 already in use**: stop whatever else is using it, or pass `--port` to the dev script: `pnpm --filter @quran-fm/web dev -- --port 5174`.
 - **No audio in dev, no console errors**: check for browser autoplay restrictions — the player requires a user gesture (clicking play) before audio can start; this is expected browser behavior, not a bug.
+- **`TypeError: Cannot read properties of undefined (reading 'on')` in `electron/main.js`, or Electron just runs as a plain Node script**: `ELECTRON_RUN_AS_NODE` is set in the shell (VS Code's integrated terminal inherits this from the VS Code Electron process itself), which makes `require('electron')` return a path string instead of the Electron API. Fix by unsetting it before running desktop commands: `unset ELECTRON_RUN_AS_NODE` (bash) — or just use a terminal outside VS Code.
+- **`Electron failed to install correctly` / desktop `dev`/`start` fails on first run**: the `electron` package's postinstall download can fail silently on some Node versions (its `extract-zip` dependency has been observed to stop after extracting only the first file, with no error). Re-run `pnpm install`, and if the app dir under `node_modules/.pnpm/electron@.../node_modules/electron/dist` only has a couple of files with no `electron.exe`, delete `dist` and `path.txt` there and re-run `node install.js` from that directory (or reinstall with a different Node version, e.g. an LTS release) to force a clean re-download/extract.

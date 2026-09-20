@@ -1,0 +1,46 @@
+{
+  "name": "@quran-fm/desktop",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Quran FM 98.2 (Cairo) — Electron desktop shell wrapping the @quran-fm/web build",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "cross-env ELECTRON_START_URL=http://localhost:5173 electron .",
+    "build:web": "pnpm --filter @quran-fm/web build",
+    "start": "pnpm run build:web && electron .",
+    "dist": "pnpm run build:web && electron-builder"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.quranfm.cairo982.desktop",
+    "productName": "Quran FM 98.2",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web-dist"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "msi"],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "msi": {
+      "oneClick": false
+    }
+  }
+}

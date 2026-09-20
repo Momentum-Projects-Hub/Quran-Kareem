@@ -6,7 +6,7 @@ import { ShareButtons } from './ShareButtons'
 
 export function EnhancedPlayer() {
   const { t, locale, toggleLocale } = useLocale()
-  const { state, isPlaying, station, toggle } = usePlayer()
+  const { state, isPlaying, station, toggle } = usePlayer(locale)
 
   const statusLabel =
     state === 'loading' ? t('loading') : state === 'retrying' ? t('retrying') : state === 'playing' ? t('stationTagline') : t('stationTagline')
@@ -26,7 +26,7 @@ export function EnhancedPlayer() {
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
         <div className="flex flex-col items-center text-center">
           <img
-            src="/station-artwork.svg"
+            src={`${import.meta.env.BASE_URL}station-artwork.svg`}
             alt={station.name[locale]}
             className="h-32 w-32 rounded-2xl shadow-lg"
             width={128}
