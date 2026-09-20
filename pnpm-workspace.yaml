@@ -1,5 +1,7 @@
 packages:
   - "packages/*"
 allowBuilds:
+  dtrace-provider: true
   electron: true
   esbuild: true
+  protobufjs: true

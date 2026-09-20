@@ -8,6 +8,8 @@
     "build:web": "pnpm --filter @quran-fm/web build",
     "dev:desktop": "pnpm --filter @quran-fm/desktop dev",
     "build:desktop": "pnpm --filter @quran-fm/desktop dist",
+    "dev:mobile": "pnpm --filter @quran-fm/mobile start",
+    "typecheck:mobile": "pnpm --filter @quran-fm/mobile typecheck",
     "test": "pnpm -r test"
   },
   "engines": {

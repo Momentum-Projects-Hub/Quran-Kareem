@@ -4,7 +4,7 @@ Bilingual (Arabic/English) web, desktop, and mobile app streaming إذاعة ا�
 
 > This document supersedes the earlier research notes. Corrections found during verification are called out in **Section 0** because they change the architecture.
 
-> **Status (2026-09-20):** Phase 0, Phase 1, Phase 1.1 (UI/UX polish), and Phase 2 (desktop) are implemented — see **Section 12**. Phase 3 (mobile) is a stub only.
+> **Status (2026-09-20):** Phase 0, Phase 1, Phase 1.1 (UI/UX polish), Phase 2 (desktop), and Phase 3 (mobile) are implemented — see **Section 12**.
 
 ---
 
@@ -48,11 +48,11 @@ Verified with a ranged GET following redirects: the public URL 302-redirects (`L
 |---|---|---|
 | Web | React + Vite + TypeScript + Tailwind CSS | Fast dev loop, matches the UI snippets already sketched in the old notes |
 | Desktop | ~~Tauri~~ **Electron** wrapping the same web build | Originally planned as Tauri for smaller binaries, but this dev environment has no Rust/Cargo toolchain and installing one was judged not worth the setup cost for a v1 audio-player shell. §11 already flagged Electron as an acceptable fallback, so Phase 2 was built on Electron (pure Node/Chromium, no native toolchain needed). Revisit Tauri later if binary size/memory becomes a real problem |
-| Mobile | React Native (Expo, bare workflow or EAS) + `expo-av` / `react-native-track-player` for background audio | Matches existing notes; `react-native-track-player` specifically for lock-screen controls + background service |
+| Mobile | React Native (Expo SDK 57, bare workflow via `expo prebuild`) + `react-native-track-player` for background audio | Lock-screen controls + a background service are core to a radio app, not optional; `react-native-track-player` ships no Expo config plugin so the managed/Expo-Go workflow isn't viable — see §7, §12 |
 | Shared logic | `packages/core` — plain TypeScript, no framework deps | Stream resolution, health-check, i18n strings, types — imported by web, desktop (via web), and mobile |
 | Package management | pnpm workspaces (monorepo) | Single repo, shared core package, avoids version drift between web/mobile copies of the same resolver logic |
 | State | React hooks + Context (`usePlayer`, `useLocale`) | App is small; Redux/Zustand is unnecessary overhead |
-| i18n | `react-i18next` (or a minimal custom dictionary — see §8) | Standard, RTL-aware, works across RN and web |
+| i18n | Minimal custom dictionary (`packages/core/src/i18n`) | Standard, RTL-aware, works across RN and web without pulling in `react-i18next` for a two-locale, ~10-key app |
 | Web hosting | Cloudflare Pages, deployed via GitHub-connected CI/CD | Free static hosting, global CDN, no server needed — the app is a pure static SPA that talks directly to `stream.radiojar.com` from the client. Auto-deploys on push to `main`, PR preview URLs for free. See §6 |
 
 ---
@@ -93,7 +93,20 @@ quran-fm/
 │   │   │   ├── preload.js       # contextBridge -> window.desktop (tray play/pause sync)
 │   │   │   └── icon.png         # placeholder — replace with real branding before shipping
 │   │   └── README.md
-│   └── mobile/                # stub only — see §10, §12 (Phase 3, not yet built)
+│   └── mobile/                 # @quran-fm/mobile — Expo (React Native) app (Phase 3)
+│       ├── App.tsx              # LocaleProvider + EnhancedPlayer
+│       ├── index.js             # registerRootComponent + TrackPlayer.registerPlaybackService
+│       ├── app.json              # Expo config: bundle IDs, background-audio permissions
+│       ├── assets/               # icon.png, splash.png, station-artwork.png (1x1 placeholders — see §12)
+│       └── src/
+│           ├── i18n/LocaleContext.tsx    # AsyncStorage-persisted locale + RTL restart notice
+│           └── player/
+│               ├── usePlayer.ts           # wires core's streamResolver to TrackPlayer
+│               ├── trackPlayerAdapter.ts  # react-native-track-player -> core AudioAdapter
+│               ├── playbackService.ts     # TrackPlayer background service (remote play/pause/stop)
+│               ├── EnhancedPlayer.tsx     # main player screen UI
+│               ├── EqualizerBars.tsx      # Animated equalizer bars
+│               └── OfflineLinks.tsx
 ├── pnpm-workspace.yaml
 ├── package.json
 └── docs/
@@ -210,15 +223,20 @@ See [Running-and-Testing.md](./Running-and-Testing.md) for the full step-by-step
 
 ---
 
-## 7. Mobile implementation (React Native)
+## 7. Mobile implementation (React Native) — implemented, see §12
 
-1. `expo install expo-av` (simplest path) **or** `react-native-track-player` if lock-screen transport controls + background service are required from day one (recommended, since "radio app" implies exactly this).
-2. Permissions:
-   - iOS: `UIBackgroundModes: ["audio"]` in `Info.plist`.
-   - Android: `FOREGROUND_SERVICE`, `WAKE_LOCK` in `AndroidManifest.xml`; target-SDK-appropriate foreground service type (`mediaPlayback`) for Android 14+.
-3. Register a `TrackPlayer` playback service once at app entry; feed it `PRIMARY_STREAM` from `packages/core` — same resolver logic as web (no duplicated stream-selection code).
-4. Lock-screen metadata: title/artist from `PRIMARY_STREAM.name[locale]`, artwork from the bundled local asset (same reasoning as §5 — don't depend on a remote image for lock-screen display).
-5. Handle interruptions (phone calls, other audio apps) via `TrackPlayer` events; resume-on-interruption-end should be opt-in, not automatic (avoid a jarring surprise resume).
+**Implemented** as `packages/mobile` (`@quran-fm/mobile`) — Expo SDK 57 / React Native 0.87 / React 19.2 (matching `packages/web`'s React 19 major so shared TS types line up).
+
+1. `react-native-track-player` (not `expo-av`) — chosen per the original recommendation since lock-screen transport controls + a background service are core to a radio app, not a stretch goal. It ships **no Expo config plugin** (verified against the published package — no `app.plugin.js`), so this app cannot run inside plain Expo Go; it requires `expo prebuild` to generate native `android/`/`ios/` projects (bare workflow), matching the "bare workflow or EAS" option flagged in §2.
+2. Permissions declared in `app.json` (applied to the native projects at `expo prebuild` time):
+   - iOS: `ios.infoPlist.UIBackgroundModes: ["audio"]`.
+   - Android: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK` in `android.permissions`.
+3. `index.js` calls `TrackPlayer.registerPlaybackService(() => playbackService)` at module scope (required so the service can run detached from the React tree, e.g. app killed on Android); `src/player/playbackService.ts` wires `Event.RemotePlay`/`RemotePause`/`RemoteStop` to `TrackPlayer.play()`/`pause()`/`stop()`.
+4. `src/player/trackPlayerAdapter.ts` implements core's `AudioAdapter` (`play(url)`/`stop()`) on top of `TrackPlayer` — mirrors `packages/web/src/player/audioAdapter.ts`'s contract exactly: `play()` resolves once `Event.PlaybackState` reports `State.Playing` and rejects on `Event.PlaybackError`, so `streamResolver`'s retry/backoff state machine (§4) drives mobile identically to web with zero duplicated logic. Every `play()` call does `TrackPlayer.reset()` then re-adds the track with the fresh public URL — never caches the resolved redirect (§0).
+5. Lock-screen metadata: `title`/`artist` from `PRIMARY_STREAM.name[locale]`, artwork from the bundled local asset (`assets/station-artwork.png`, currently a placeholder — see §12) — same reasoning as §5, no remote image dependency for lock-screen display. `TrackPlayer.updateOptions({ capabilities: [Play, Pause, Stop], ... })` registers the transport controls once via `ensurePlayerSetup()`.
+6. Interruptions (phone calls, other audio apps): `Event.RemoteDuck` triggers `resolver.stop()` when `paused || permanent`; the app does **not** auto-resume when the interruption ends — the user taps play again, avoiding a jarring surprise resume, exactly as originally specced.
+7. **App store distribution**: builds/submissions go through **EAS Build/Submit** (`packages/mobile/eas.json`, `eas-cli` devDependency) rather than local Gradle/Xcode builds — no Android SDK/Xcode needed locally. Full Google Play + Apple App Store publishing walkthrough (developer accounts, store listing requirements, signing/credentials, `eas build`/`eas submit` commands) is in [Running-and-Testing.md § Publishing the mobile app to the app stores](./Running-and-Testing.md#publishing-the-mobile-app-to-the-app-stores) — not executed in this environment (no Expo/Apple/Google accounts here), so treat it as unverified until run once with real credentials.
+8. i18n/RTL: `src/i18n/LocaleContext.tsx` persists locale via `@react-native-async-storage/async-storage` (mobile's AsyncStorage per §8, vs. `localStorage` on web), defaults to Arabic on first launch (§11), and calls `I18nManager.allowRTL(true)` / `forceRTL(wantsRtl)` on locale change — since RN's RTL flip only fully applies after a JS bundle reload, an `Alert` tells the user to restart the app rather than silently leaving a half-mirrored layout (§8's "restart to apply" notice).
 
 ---
 
@@ -235,7 +253,7 @@ See [Running-and-Testing.md](./Running-and-Testing.md) for the full step-by-step
 
 - `packages/core`: unit tests (Vitest) for `streamResolver`'s retry/backoff state machine and `mp3quran.ts` response parsing (mock fetch, including the corrected `{radios: [...]}` shape).
 - `packages/web`: component test for offline-state rendering (external links shown) and locale/RTL switch.
-- `packages/mobile`: manual test pass on a real device for background audio + lock-screen controls (simulators are unreliable for background audio behavior).
+- `packages/mobile`: no automated test suite (no `test` script — `pnpm -r test` skips it cleanly, same as `packages/desktop`); `pnpm --filter @quran-fm/mobile typecheck` (`tsc --noEmit`) passes and is the only automated check. Requires a manual test pass on a real device for background audio + lock-screen controls (simulators are unreliable for background audio behavior) — not done in this environment, see §12.
 - Before any release: manually confirm the primary stream URL is still live — live streams do go stale; this is a recurring manual check, not something CI can catch.
 - After every manual Cloudflare Pages deploy (§6): load the live URL and confirm playback actually starts — a static-hosting deploy can silently ship a broken build (e.g. stale cached `index.html` referencing a deleted JS chunk) that only shows up on the hosted URL, not in local dev.
 
@@ -365,8 +383,9 @@ export default ShareButtons;
 - ✅ Background playback: closing the window hides it instead of quitting; `backgroundThrottling: false` keeps the stream decoding while hidden.
 - ⚠️ Not verified in this session: an actual packaged Windows installer (`pnpm --filter @quran-fm/desktop dist`) and live audio playback in the Electron window — see §12 for why (Electron's binary download was corrupted in this sandboxed dev environment). `electron/icon.png` is a 1x1 placeholder pending real branding.
 
-**Phase 3 — Mobile** — not started
-- RN app with `react-native-track-player`, background audio, lock-screen metadata, bilingual/RTL. Only a placeholder `packages/mobile/README.md` exists.
+**Phase 3 — Mobile** ✅ code done, ⚠️ unverified on device (see §12)
+- ✅ `packages/mobile` Expo app: `react-native-track-player` background audio (`trackPlayerAdapter.ts`, `playbackService.ts`), lock-screen metadata/controls, bilingual/RTL (`LocaleContext.tsx` with AsyncStorage + restart-on-RTL-flip notice), `EnhancedPlayer` UI reusing `packages/core`'s `streamResolver`/i18n.
+- ⚠️ Not verified: running on an actual Android/iOS device or simulator — this dev environment has no Android Studio/Xcode toolchain (see §12). `pnpm install` and `tsc --noEmit` both succeed.
 
 **Phase 4 — Polish / stretch**
 - MP3Quran "browse other stations" feature using the corrected API client (client exists in `core` and is unit-tested, but no UI consumes it yet).
@@ -381,26 +400,27 @@ Electron is fine. — **Resolved in Phase 2:** used, since the dev environment h
 - Should locale default follow system language, or always default to Arabic given the station's primary audience? Defaulting to Arabic-first above.
 Always default to Arabic.
 - Confirm whether `react-native-track-player` (heavier setup, native lock-screen controls) or `expo-av` (simpler, weaker background/lock-screen support) is the right tradeoff for v1 — leaning `react-native-track-player` per §6 since lock-screen controls are a core expectation for a radio app.
-Yes the Mobile APP & Web app, desktop app  should work on lock screen & on background. 
+Yes the Mobile APP & Web app, desktop app  should work on lock screen & on background. — **Resolved in Phase 3:** `react-native-track-player` used (see §7/§12); no Expo config plugin ships with it, so the app requires `expo prebuild` (bare workflow), not plain Expo Go.
 
 ---
 
 ## 12. Implementation status (2026-09-20)
 
-Phase 0, Phase 1, Phase 1.1, and Phase 2 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
+Phase 0, Phase 1, Phase 1.1, Phase 2, and Phase 3 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
 
 **What's implemented:**
 - `packages/core` (`@quran-fm/core`): `streams.ts`, `streamResolver.ts` (+ tests), `mp3quran.ts` (+ tests), `i18n/{ar,en}.json` + `i18n/index.ts`. All framework-agnostic, no DOM/React deps.
 - `packages/web` (`@quran-fm/web`): Vite + React 19 + TypeScript + Tailwind CSS v4 (via `@tailwindcss/vite`, not a PostCSS config). `EnhancedPlayer` card with play/pause, CSS-animated equalizer bars, bilingual `LocaleContext` (persists to `localStorage`, toggles `<html dir>`/`lang`), offline state rendering `EXTERNAL_LISTEN_LINKS`. `public/_redirects` present for the Cloudflare Pages SPA fallback (§6). Local `station-artwork.svg` used directly — no remote image / `onError` swap needed since there's no remote source to begin with.
 - Phase 1.1 UI/UX polish (see §10): frosted-glass card, `Cairo`/`Tajawal` Google Fonts, pulsing play button, globe-icon language toggle fixed to the screen corner, and `ShareButtons.tsx` (Facebook/WhatsApp/Telegram links + native Web Share API).
 - Phase 2 desktop (`packages/desktop`, `@quran-fm/desktop`): Electron shell (see §2, §5, §11 for why Electron instead of the originally-planned Tauri). `electron/main.js` creates the `BrowserWindow`, a system-tray Play/Pause/Show/Quit menu, and hides-on-close background-playback behavior; `electron/preload.js` bridges tray clicks and playback-state reporting to the renderer via `window.desktop` (typed in `packages/web/src/desktop.d.ts`). `packages/web/src/player/usePlayer.ts` now also drives the standard `MediaSession` API for lock-screen/media-key controls — this is picked up automatically by Electron's embedded Chromium (Windows SMTC) and works unmodified in a plain browser tab too, so no platform-specific desktop code was needed for that part.
-- `packages/mobile`: placeholder `README.md` only, per Phase 3 scope — not built.
+- Phase 3 mobile (`packages/mobile`, `@quran-fm/mobile`): Expo SDK 57 + React Native 0.87 + React 19.2 (see §7 for full detail). `trackPlayerAdapter.ts` implements core's `AudioAdapter` on `react-native-track-player`, reusing the exact same `streamResolver` retry/backoff state machine as web — zero duplicated stream-selection logic, as originally planned (§4). `playbackService.ts` + `index.js`'s `TrackPlayer.registerPlaybackService` handle background/killed-app remote transport controls. `LocaleContext.tsx` mirrors `packages/web`'s `LocaleContext` but backed by `@react-native-async-storage/async-storage` instead of `localStorage`, with an `Alert`-based "restart to apply" notice on RTL flip (§8). `EnhancedPlayer.tsx`/`EqualizerBars.tsx`/`OfflineLinks.tsx` are React Native re-implementations of the web components (`View`/`Text`/`Animated` instead of DOM/Tailwind), same visual language (emerald/gold, glass-ish card, equalizer bars, offline external links).
 
 **Deviations from the original plan:**
 - `mp3quran.ts` is not re-exported as a "browse stations" UI feature — only the API client + its tests exist, as scoped for Phase 1.
 - `streamResolver` takes an injected `AudioAdapter` interface (see §4) rather than a bare `onStateChange` callback, so the resolver logic can be reused by a future RN adapter — this is a superset of the original sketch, not a scope change.
 - Package manager: pnpm was not preinstalled in this environment and was installed via `npm install -g pnpm` (approved `esbuild`'s postinstall script through `pnpm approve-builds` / `pnpm-workspace.yaml`'s `allowBuilds`).
 - **Desktop shell is Electron, not Tauri** (§2, §11): this dev environment has no Rust/Cargo toolchain, and installing one just to build a v1 audio-player shell wasn't worth the setup cost. §11 had already flagged Electron as acceptable. `src-tauri/`'s placeholder was removed and replaced by `packages/desktop/`.
+- **Mobile requires `expo prebuild` (bare workflow), not Expo Go** (§7/§11): `react-native-track-player` ships no Expo config plugin (checked the published package's file list — no `app.plugin.js`), so native background-audio/lock-screen config can't be applied through a managed-workflow config plugin. §2's stack table already flagged "bare workflow or EAS" as the expected mobile path.
 
 **Verification performed:**
 - `pnpm --filter @quran-fm/core test` — 7/7 passing (resolver state machine + mp3quran parsing).
@@ -409,6 +429,10 @@ Phase 0, Phase 1, Phase 1.1, and Phase 2 are built. This section records what ac
 - `pnpm install` at the repo root succeeds with `electron` added to `pnpm-workspace.yaml`'s `allowBuilds` (same pattern as the existing `esbuild` entry).
 - **Not yet verified:** actual audio playback in a real browser or in the Electron window (no browser/desktop automation tool was available in this session) — see the Phase 0 open item above. Electron itself could not be launched in this sandbox: `@electron/get` downloads a 115MB `electron-v33.4.11-win32-x64.zip`, but the file this environment receives has a checksum that validates yet a central directory listing only one entry (`LICENSES.chromium.html`) — consistent with a network intermediary in this sandbox truncating/rewriting large binary responses, not a bug in `packages/desktop`'s code. This is expected to work in a normal (non-sandboxed) environment; on a machine with unrestricted internet access, verify with `pnpm --filter @quran-fm/desktop start` and confirm the tray menu, background-on-close, and lock-screen controls all behave as described above before shipping.
 - `electron/icon.png` is a 1x1 placeholder — replace with real station branding (plus `.ico`/`.icns` variants for `electron-builder`) before producing a packaged installer.
+- `pnpm install` at the repo root succeeds with `packages/mobile` added — Expo/React Native/`react-native-track-player` and their transitive deps (378 packages) all resolved and downloaded from the public npm registry without the truncation issue that blocked Electron's binary download (§12 above); this suggests that issue was specific to Electron's non-npm `@electron/get` download path, not a general sandbox network limitation.
+- `pnpm --filter @quran-fm/mobile typecheck` (`tsc --noEmit`) passes cleanly — confirms `trackPlayerAdapter.ts`'s `AudioAdapter` implementation, `LocaleContext.tsx`, and all component props type-check against `@quran-fm/core` and `react-native-track-player`'s types.
+- **Not verified:** running the app on an actual Android/iOS simulator or device. This sandbox has no Android Studio/Xcode/native SDKs, and `react-native-track-player` needs a real native build (`expo prebuild` + `expo run:android`/`run:ios`) — it cannot run in Expo Go (§7/§11). Before shipping: run `pnpm --filter @quran-fm/mobile prebuild` then `android`/`ios` on a machine with the native toolchains installed, and confirm background playback survives backgrounding, lock-screen controls work on both platforms, and the RTL restart notice behaves correctly when switching languages.
+- `packages/mobile/assets/{icon,splash,station-artwork}.png` are 1x1 placeholders (same pattern as `electron/icon.png`) — replace with real station branding before shipping.
 
 **How to run:**
 ```sh
@@ -420,7 +444,17 @@ pnpm --filter @quran-fm/web build     # outputs packages/web/dist/ for Cloudflar
 pnpm --filter @quran-fm/desktop dev   # Electron against the Vite dev server (run alongside `web dev`)
 pnpm --filter @quran-fm/desktop start # Electron against the built packages/web/dist
 pnpm --filter @quran-fm/desktop dist  # packages a Windows installer via electron-builder
+pnpm --filter @quran-fm/mobile typecheck # tsc --noEmit (only automated check — no device/simulator in this environment)
+pnpm --filter @quran-fm/mobile prebuild  # generates android/ and ios/ native projects
+pnpm --filter @quran-fm/mobile android   # requires Android Studio/SDK
+pnpm --filter @quran-fm/mobile ios       # requires Xcode (macOS only)
+pnpm --filter @quran-fm/mobile build:android  # eas build --platform android --profile production
+pnpm --filter @quran-fm/mobile submit:android # eas submit --platform android --latest (Google Play)
+pnpm --filter @quran-fm/mobile build:ios      # eas build --platform ios --profile production
+pnpm --filter @quran-fm/mobile submit:ios     # eas submit --platform ios --latest (App Store)
 ```
+
+App store publishing (Google Play + Apple App Store account setup, store listing requirements, signing/credentials) is documented step-by-step in [Running-and-Testing.md § Publishing the mobile app to the app stores](./Running-and-Testing.md#publishing-the-mobile-app-to-the-app-stores). Config lives in `packages/mobile/eas.json` and `app.json`'s `extra.eas.projectId`, both still containing `REPLACE_WITH_*` placeholders until `eas init`/real account IDs are filled in.
 
 ---
 

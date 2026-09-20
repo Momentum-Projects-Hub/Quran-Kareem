@@ -6,3 +6,6 @@ dist/
 .env
 .env.local
 packages/desktop/release/
+packages/mobile/google-play-service-account.json
+packages/mobile/android/
+packages/mobile/ios/
