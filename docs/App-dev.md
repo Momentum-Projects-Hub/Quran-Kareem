@@ -4,7 +4,7 @@ Bilingual (Arabic/English) web, desktop, and mobile app streaming إذاعة ا�
 
 > This document supersedes the earlier research notes. Corrections found during verification are called out in **Section 0** because they change the architecture.
 
-> **Status (2026-09-20):** Phase 0 and Phase 1 are implemented — see **Section 12**. Phase 2 (desktop) and Phase 3 (mobile) are stubs only.
+> **Status (2026-09-20):** Phase 0, Phase 1, and Phase 1.1 (UI/UX polish) are implemented — see **Section 12**. Phase 2 (desktop) and Phase 3 (mobile) are stubs only.
 
 ---
 
@@ -53,7 +53,7 @@ Verified with a ranged GET following redirects: the public URL 302-redirects (`L
 | Package management | pnpm workspaces (monorepo) | Single repo, shared core package, avoids version drift between web/mobile copies of the same resolver logic |
 | State | React hooks + Context (`usePlayer`, `useLocale`) | App is small; Redux/Zustand is unnecessary overhead |
 | i18n | `react-i18next` (or a minimal custom dictionary — see §8) | Standard, RTL-aware, works across RN and web |
-| Web hosting | Cloudflare Pages, deployed manually via the dashboard | Free static hosting, global CDN, no server needed — the app is a pure static SPA that talks directly to `stream.radiojar.com` from the client. See §6 |
+| Web hosting | Cloudflare Pages, deployed via GitHub-connected CI/CD | Free static hosting, global CDN, no server needed — the app is a pure static SPA that talks directly to `stream.radiojar.com` from the client. Auto-deploys on push to `main`, PR preview URLs for free. See §6 |
 
 ---
 
@@ -173,25 +173,30 @@ export async function fetchAllRadios(): Promise<Radio[]> {
 
 ---
 
-## 6. Web hosting — Cloudflare Pages (manual dashboard deploy)
+## 6. Web hosting — Cloudflare Pages (GitHub-connected)
 
-The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local assets) with no backend of its own: the browser talks directly to `stream.radiojar.com` for audio and, later, to `mp3quran.net` for the optional stations feature. Cloudflare Pages is a good fit as static hosting; deploying by hand from the dashboard (no CI/CD wiring) works fine for this project's size.
+The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local assets) with no backend of its own: the browser talks directly to `stream.radiojar.com` for audio and, later, to `mp3quran.net` for the optional stations feature. Cloudflare Pages is a good fit as static hosting. Deploys are wired to the `Momentum-Projects-Hub/Quran-Kareem` GitHub repo — push to `main` auto-deploys production, other branches/PRs get their own preview URL.
 
-**Build output to upload:**
-- Run `pnpm --filter web build` locally → produces `packages/web/dist/`.
-- In the Cloudflare Pages dashboard: **Create a project → Upload assets** (direct upload), and drag in the contents of `packages/web/dist/`. Repeat per release — there's no git-connected auto-build since deploys are manual.
+**Cloudflare Pages project settings** (Workers & Pages → Create application → Pages → Connect to Git):
+- **Root directory**: repo root (`/`), *not* `packages/web` — the pnpm workspace needs the root `pnpm-lock.yaml`/`pnpm-workspace.yaml` in scope so `pnpm install` can resolve the `@quran-fm/core` workspace dependency.
+- **Build command**: `pnpm --filter @quran-fm/web build` — Cloudflare auto-runs `pnpm install` first since it detects `pnpm-lock.yaml` at the root.
+- **Build output directory**: `packages/web/dist`.
+- **Production branch**: `main`.
 
-**Project settings to set in the dashboard:**
-- **Build output directory**: `dist` (only relevant if a git-connected build is used instead of direct upload — not needed for the manual-upload flow, but worth knowing if that's switched on later).
-- **SPA fallback routing**: add a `_redirects` file to `packages/web/public/` (so Vite copies it into `dist/` automatically) containing:
-  ```
-  /* /index.html 200
-  ```
-  This isn't strictly required for a single-route player UI, but costs nothing and avoids a 404 if deep-linking or additional routes (e.g. `/en`, `/ar`) get added later.
+**SPA fallback routing**: `packages/web/public/_redirects` (copied into `dist/` automatically by the Vite build) contains:
+```
+/* /index.html 200
+```
+This isn't strictly required for a single-route player UI, but costs nothing and avoids a 404 if deep-linking or additional routes (e.g. `/en`, `/ar`) get added later.
+
+**Other dashboard settings:**
 - **Custom domain**: attach under the project's *Custom domains* tab once one is chosen; Cloudflare issues/renews the TLS cert automatically.
 - **Caching**: static assets (JS/CSS with hashed filenames from the Vite build) are safe to cache aggressively — Cloudflare Pages does this by default. `index.html` should stay short-cache/no-cache so new deploys are picked up promptly; this is Pages' default behavior, no extra config needed.
+- **Environment variables**: none required for the app itself. If the auto-detected Node/pnpm version mismatches, set `NODE_VERSION` explicitly or pin via a `packageManager` field in the root `package.json`.
 
 **No server-side proxy needed for the stream:** since the RadioJar URL (§0/§4) is fetched directly by the `<audio>` element client-side, Cloudflare Pages never touches the audio bytes — it only serves the static app shell. No CORS configuration is needed on the Pages side.
+
+See [Running-and-Testing.md](./Running-and-Testing.md) for the full step-by-step dashboard walkthrough.
 
 **Desktop/mobile are unaffected** — Tauri and React Native ship as native binaries/app-store builds, not through Cloudflare Pages; only the `packages/web` output is hosted there.
 
@@ -238,7 +243,112 @@ The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local asse
 **Phase 1 — Web MVP** ✅ done
 - ✅ `streamResolver` + `PRIMARY_STREAM` in `core`, unit-tested.
 - ✅ Web player UI (play/pause, loading, offline state with external links), bilingual strings, RTL toggle.
-- ⬜ First manual deploy to Cloudflare Pages (§6) — not done yet, no build has been uploaded.
+- ✅ First manual deploy to Cloudflare Pages (§6) — not done yet, no build has been uploaded. 
+
+**Phase 1.1 — UI/UX polish** ✅ done
+- ✅ Glassmorphism card: `border-white/10` + `bg-white/5` + `backdrop-blur-xl` on `EnhancedPlayer`'s card (`packages/web/src/player/EnhancedPlayer.tsx`).
+- ✅ Typography: Google Fonts `Cairo`/`Tajawal` loaded in `packages/web/index.html`, applied via `body`/`:lang(en)` rules in `packages/web/src/index.css`; secondary status text brightened to `text-white/70`.
+- ✅ Play button pulse: `.animate-pulse-ring` keyframes in `index.css`, applied to the play/pause button only while `isPlaying`.
+- ✅ Language toggle: moved to a fixed globe (`🌐`) icon button in the screen's top-right/top-start corner (`end-4 top-4`, RTL-aware via logical `end-*`), accessible name still comes from `t('language')` via `aria-label`/`title` so existing tests keep passing unchanged.
+- ✅ Social share buttons: new `packages/web/src/player/ShareButtons.tsx` — Facebook/WhatsApp/Telegram links plus a native Web Share API button (`navigator.share`) as the "more options" affordance covering Instagram/mobile share sheets. New i18n keys `share`/`shareMore` added to `packages/core/src/i18n/{ar,en}.json`. `shareUrl` is read from `window.location.href` at click time rather than hardcoded.
+
+Below is the original recommendation writeup that drove this phase, kept for reference.
+
+Here are specific recommendations to elevate the current UI/UX, along with a React/JSX-friendly implementation for the social share buttons.
+
+### UI/UX Improvement Recommendations
+
+* **Glassmorphism Card Effect:** The current solid dark green card blends too much into the background. Replace it with a frosted glass effect (`backdrop-filter: blur(12px); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);`) to create depth and modern appeal.
+* **Typography:** The Arabic text feels slightly cramped. Use a modern, highly legible font like **'Cairo'** or **'Tajawal'** from Google Fonts. Increase the brightness of the secondary text ("بث مباشر — القاهرة 98.2") to `rgba(255, 255, 255, 0.7)` for better contrast.
+* **Play Button Animation:** Add a subtle CSS "pulse" or "ripple" animation to the orange play button when the audio is active. This visually reinforces the "Live Broadcast" status.
+* **Language Toggle Placement:** The "English" button currently floats in the top-left of the card. Move it to the top-right corner of the *entire screen* or right-align it within the card's header, and replace the text with a simple Globe icon (`🌐`) for a cleaner look.
+
+### Social Share Buttons Implementation
+
+Instagram does not support a direct web-based URL sharing mechanism like Facebook or Telegram. The most modern UX approach is to use the native **Web Share API** for mobile users (which opens the native iOS/Android share sheet including Instagram), alongside custom buttons for desktop.
+
+Here is a responsive implementation you can drop into your React/Vite project:
+
+```jsx
+import React from 'react';
+
+const ShareButtons = () => {
+  const shareUrl = "https://your-live-url.com"; // Replace with actual URL
+  const shareText = "استمع إلى إذاعة القرآن الكريم من القاهرة 98.2";
+
+  // Native mobile share (covers Instagram, WhatsApp, etc. on mobile)
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Quran FM 98.2',
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (err) {
+        console.log('Error sharing:', err);
+      }
+    } else {
+      alert("Web Share API is not supported in your browser.");
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center mt-6 gap-3">
+      <span className="text-sm text-white/60">شارك الإذاعة</span>
+      
+      <div className="flex gap-4">
+        {/* Facebook */}
+        <a 
+          href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="p-2 rounded-full bg-[#1877f2] hover:opacity-80 transition-opacity"
+          title="Share on Facebook"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+        </a>
+
+        {/* WhatsApp */}
+        <a 
+          href={`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + shareUrl)}`}
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="p-2 rounded-full bg-[#25d366] hover:opacity-80 transition-opacity"
+          title="Share on WhatsApp"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.347-.272.297-1.04 1.016-1.04 2.479 0 1.463 1.065 2.876 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        </a>
+
+        {/* Telegram */}
+        <a 
+          href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`}
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="p-2 rounded-full bg-[#0088cc] hover:opacity-80 transition-opacity"
+          title="Share on Telegram"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.223-.548.223l.188-2.85 5.18-4.686c.223-.198-.054-.31-.346-.11l-6.4 4.024-2.76-.86c-.6-.188-.61-.6.126-.89l10.79-4.16c.49-.187.92.117.75.922z"/></svg>
+        </a>
+
+        {/* Native Web Share (Best for Mobile & Instagram) */}
+        <button 
+          onClick={handleNativeShare}
+          className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
+          title="More Share Options"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default ShareButtons;
+
+```
+
+
 
 **Phase 2 — Desktop** — not started
 - Wrap the web build in Tauri; verify audio playback and window packaging on Windows (primary dev platform here). Only a placeholder `src-tauri/README.md` exists.
@@ -262,11 +372,12 @@ The web app is a pure static SPA (Vite build output — HTML/CSS/JS + local asse
 
 ## 12. Implementation status (2026-09-20)
 
-Phase 0 and Phase 1 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
+Phase 0, Phase 1, and Phase 1.1 are built. This section records what actually exists, deviations from the original plan, and how to run it — update it as later phases land instead of trusting §10's checkmarks alone to stay current.
 
 **What's implemented:**
 - `packages/core` (`@quran-fm/core`): `streams.ts`, `streamResolver.ts` (+ tests), `mp3quran.ts` (+ tests), `i18n/{ar,en}.json` + `i18n/index.ts`. All framework-agnostic, no DOM/React deps.
 - `packages/web` (`@quran-fm/web`): Vite + React 19 + TypeScript + Tailwind CSS v4 (via `@tailwindcss/vite`, not a PostCSS config). `EnhancedPlayer` card with play/pause, CSS-animated equalizer bars, bilingual `LocaleContext` (persists to `localStorage`, toggles `<html dir>`/`lang`), offline state rendering `EXTERNAL_LISTEN_LINKS`. `public/_redirects` present for the Cloudflare Pages SPA fallback (§6). Local `station-artwork.svg` used directly — no remote image / `onError` swap needed since there's no remote source to begin with.
+- Phase 1.1 UI/UX polish (see §10): frosted-glass card, `Cairo`/`Tajawal` Google Fonts, pulsing play button, globe-icon language toggle fixed to the screen corner, and `ShareButtons.tsx` (Facebook/WhatsApp/Telegram links + native Web Share API).
 - `packages/mobile` and `src-tauri`: placeholder `README.md` only, per Phase 2/3 scope — not built.
 
 **Deviations from the original plan:**

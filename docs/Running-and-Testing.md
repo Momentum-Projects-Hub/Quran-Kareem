@@ -63,7 +63,7 @@ Or:
 pnpm build:web
 ```
 
-Runs `tsc -b && vite build`, producing static output in `packages/web/dist/` (deployable to Cloudflare Pages — see [App-dev.md §6](./App-dev.md#6-web-hosting--cloudflare-pages-manual-dashboard-deploy)).
+Runs `tsc -b && vite build`, producing static output in `packages/web/dist/` (this is also what Cloudflare Pages builds via the GitHub-connected pipeline — see below and [App-dev.md §6](./App-dev.md#6-web-hosting--cloudflare-pages-github-connected)).
 
 To sanity-check the production build locally:
 
@@ -74,6 +74,46 @@ pnpm --filter @quran-fm/web preview
 ### Desktop / Mobile
 
 Not yet implemented (Phase 2/3). `src-tauri/README.md` and `packages/mobile/README.md` are placeholders only — nothing to run there yet.
+
+---
+
+## Deploying to Cloudflare Pages (GitHub-connected)
+
+The repo is a pnpm workspace monorepo with the web app in `packages/web`, so Pages needs to build from the **repo root** (to resolve the `@quran-fm/core` workspace dependency) but publish `packages/web/dist`. The repo's GitHub remote is `Momentum-Projects-Hub/Quran-Kareem`.
+
+1. **Push to GitHub** (if you haven't already):
+   ```sh
+   git push origin main
+   ```
+
+2. **Create the Pages project:**
+   - Log in to the [Cloudflare dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create application** → **Pages** tab → **Connect to Git**.
+   - Authorize Cloudflare's GitHub app if not already done, then select the `Momentum-Projects-Hub/Quran-Kareem` repository.
+
+3. **Build settings:**
+   | Setting | Value |
+   |---|---|
+   | Production branch | `main` |
+   | Framework preset | `Vite` (or `None` — either works since the build command is set explicitly) |
+   | Build command | `pnpm --filter @quran-fm/web build` |
+   | Build output directory | `packages/web/dist` |
+   | Root directory | `/` (leave as repo root — do **not** set it to `packages/web`, or `pnpm install` won't see the workspace and the `@quran-fm/core` dependency will fail to resolve) |
+
+   Cloudflare detects `pnpm-lock.yaml` at the repo root and runs `pnpm install` automatically before the build command — no need to chain `pnpm install &&` yourself.
+
+4. **Environment variables:** none required for the app itself (it talks directly to `stream.radiojar.com` and `mp3quran.net` from the browser — no secrets, no CORS setup needed). If the build fails to pick the right Node/pnpm version, add:
+   - `NODE_VERSION` = `20` (or whatever matches your local `node --version`)
+
+   Cloudflare's pnpm version is inferred from `pnpm-lock.yaml`'s lockfile version; a `packageManager` field in the root `package.json` (e.g. `"packageManager": "pnpm@10.x.x"`) pins it exactly if you hit a mismatch.
+
+5. **Deploy:** click **Save and Deploy**. Cloudflare clones the repo, runs the install + build, and publishes `packages/web/dist/`. Every subsequent push to `main` auto-deploys; pushes to other branches or PRs get their own preview URL automatically — no manual upload step anymore.
+
+6. **Project settings to verify** (Pages project → **Settings**):
+   - **Custom domains** tab: attach your domain once chosen — Cloudflare issues and auto-renews the TLS certificate.
+   - **Caching**: no action needed — Cloudflare Pages caches hashed JS/CSS assets aggressively by default and keeps `index.html` low/no-cache automatically, so new deploys are picked up promptly.
+   - SPA fallback routing is already handled by `packages/web/public/_redirects` (copied into `dist/` by the Vite build), so no extra redirect rules are needed in the dashboard.
+
+7. **Post-deploy check:** open the live `*.pages.dev` (or custom domain) URL and confirm playback actually starts — see the manual verification checklist below. A build can succeed while still shipping something broken (e.g. a stale cached `index.html` referencing a deleted JS chunk), so always check the hosted URL, not just that the build went green.
 
 ---
 
