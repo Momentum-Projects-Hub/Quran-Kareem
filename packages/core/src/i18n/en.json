@@ -9,5 +9,16 @@
   "listenExternally": "Listen on other sites",
   "language": "العربية",
   "share": "Earn the reward... share this website",
-  "shareMore": "More share options"
+  "shareMore": "More share options",
+  "statsTitle": "Listener Stats",
+  "statsToday": "Today",
+  "statsLast7Days": "Last 7 Days",
+  "statsLast30Days": "Last 30 Days",
+  "statsDailyChart": "Visits in the last 30 days",
+  "statsLoading": "Loading stats...",
+  "statsError": "Couldn't load stats. Please try again.",
+  "statsRetry": "Retry",
+  "statsEmpty": "No visits recorded yet",
+  "statsVsYesterday": "vs. yesterday",
+  "statsBackToPlayer": "Back to player"
 }

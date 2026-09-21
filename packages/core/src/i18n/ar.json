@@ -9,5 +9,16 @@
   "listenExternally": "استمع عبر مواقع أخرى",
   "language": "English",
   "share": "كن شريكاً في الأجر.. شارك الموقع",
-  "shareMore": "المزيد من خيارات المشاركة"
+  "shareMore": "المزيد من خيارات المشاركة",
+  "statsTitle": "إحصائيات المستمعين",
+  "statsToday": "اليوم",
+  "statsLast7Days": "آخر 7 أيام",
+  "statsLast30Days": "آخر 30 يوماً",
+  "statsDailyChart": "الزيارات خلال آخر 30 يوماً",
+  "statsLoading": "جارٍ تحميل الإحصائيات...",
+  "statsError": "تعذّر تحميل الإحصائيات. حاول مرة أخرى.",
+  "statsRetry": "إعادة المحاولة",
+  "statsEmpty": "لا توجد زيارات مسجّلة بعد",
+  "statsVsYesterday": "مقارنة بالأمس",
+  "statsBackToPlayer": "العودة إلى المشغل"
 }
