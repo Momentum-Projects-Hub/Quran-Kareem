@@ -37,6 +37,16 @@ export function usePlayer(locale: Locale): UsePlayerResult {
 
   const isPlaying = state === 'playing' || state === 'loading' || state === 'retrying'
 
+  // Counts one "play" per browser session the first time the stream actually starts —
+  // not on every reconnect/retry — so /api/stats reflects distinct listens, not blips.
+  const hasCountedPlayRef = useRef(false)
+  useEffect(() => {
+    if (state === 'playing' && !hasCountedPlayRef.current) {
+      hasCountedPlayRef.current = true
+      fetch('/api/play', { method: 'POST', keepalive: true }).catch(() => {})
+    }
+  }, [state])
+
   function toggle() {
     const resolver = resolverRef.current
     if (!resolver) return

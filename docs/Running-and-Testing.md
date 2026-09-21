@@ -96,9 +96,9 @@ pnpm --filter @quran-fm/desktop start
 
 This runs `build:web` first, then launches Electron against `packages/web/dist/`.
 
-### Building the desktop installer (MSI)
+### Building the desktop installer
 
-`packages/desktop` uses `electron-builder`, configured (in `packages/desktop/package.json`'s `build.win.target`) to produce both an NSIS `.exe` installer and an MSI package. Build with:
+`packages/desktop` uses `electron-builder`, configured (in `packages/desktop/package.json`'s `build.win.target`) to produce an NSIS `.exe` installer. Build with:
 
 ```sh
 pnpm --filter @quran-fm/desktop dist
@@ -113,12 +113,12 @@ pnpm build:desktop
 This runs `build:web` (producing `packages/web/dist/`, bundled in as `extraResources`) and then `electron-builder`, which packages the app for Windows. Output lands in `packages/desktop/release/`:
 
 - `Quran FM 98.2 Setup <version>.exe` — NSIS installer
-- `Quran FM 98.2 <version>.msi` — MSI package
 
-**Requirements for building the MSI on Windows:**
+**Requirements for building on Windows:**
 
-- The [WiX Toolset](https://wixtoolset.org/) v3 is required for `electron-builder`'s `msi` target. If it isn't installed, `electron-builder` downloads it automatically to its cache (`~/.cache/electron-builder`) on first MSI build — this needs network access the first time.
-- Building on Windows is recommended for the `msi`/`nsis` targets (cross-building Windows installers from macOS/Linux needs Wine and is not covered here).
+- Building on Windows is recommended for the `nsis` target (cross-building Windows installers from macOS/Linux needs Wine and is not covered here).
+
+**No MSI target:** an MSI build was tried and removed — WiX Toolset v3 (`light.exe`, invoked by electron-builder's `msi` target) has a long-standing bug where it fails with `LGHT0311` on the Arabic product name/shortcuts even though the generated `project.wxs` correctly declares `Codepage="65001"` (UTF-8) on the `<Product>` element; `light.exe` still validates some strings (file names, `<Shortcut Name>`) against codepage 1252 regardless. There's no electron-builder config to work around this, so `msi` was dropped from `build.win.target`, leaving NSIS (which handles Unicode product names fine) as the only Windows installer.
 
 `packages/desktop/electron/icon.png`/`icon.ico` already carry the station's branding; a macOS `.icns` variant is still needed before a Mac build ships, per the desktop package's README.
 

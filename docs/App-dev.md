@@ -217,6 +217,8 @@ This isn't strictly required for a single-route player UI, but costs nothing and
 
 **No server-side proxy needed for the stream:** since the RadioJar URL (§0/§4) is fetched directly by the `<audio>` element client-side, Cloudflare Pages never touches the audio bytes — it only serves the static app shell. No CORS configuration is needed on the Pages side.
 
+**Play-count analytics** (`/functions/api/play.ts`, `/functions/api/stats.ts`): Pages Functions that increment/read a per-day play counter, backed by a KV namespace. Requires a one-time dashboard step: Workers & Pages → project → **Settings → Functions → KV namespace bindings** → create/bind a namespace as `PLAY_STATS`. Pages Functions take routing priority over `_redirects`, so the SPA catch-all above doesn't shadow `/api/*`. Cloudflare Web Analytics (page-view counts) is enabled via the beacon script in `packages/web/index.html`.
+
 See [Running-and-Testing.md](./Running-and-Testing.md) for the full step-by-step dashboard walkthrough.
 
 **Desktop/mobile are unaffected** — Tauri and React Native ship as native binaries/app-store builds, not through Cloudflare Pages; only the `packages/web` output is hosted there.
