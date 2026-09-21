@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://quranfm-live.pages.dev/sitemap.xml

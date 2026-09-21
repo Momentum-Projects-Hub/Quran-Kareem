@@ -2,7 +2,7 @@ import { useLocale } from '../i18n/LocaleContext'
 
 export function ShareButtons() {
   const { t } = useLocale()
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://quran-fm.pages.dev'
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://quranfm-live.pages.dev'
   const shareText = t('appName')
 
   const handleNativeShare = async () => {
