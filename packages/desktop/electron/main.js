@@ -38,15 +38,6 @@ function createWindow() {
   } else {
     mainWindow.loadFile(resolveIndexHtml())
   }
-
-  // Closing the window hides it instead of quitting, so playback (and the
-  // tray controls) survive in the background — mirrors the mobile/lock-screen
-  // background-playback requirement from docs/App-dev.md §11.
-  mainWindow.on('close', (event) => {
-    if (app.isQuitting) return
-    event.preventDefault()
-    mainWindow?.hide()
-  })
 }
 
 function updateTray() {
@@ -61,10 +52,7 @@ function updateTray() {
       { type: 'separator' },
       {
         label: 'Quit',
-        click: () => {
-          app.isQuitting = true
-          app.quit()
-        },
+        click: () => app.quit(),
       },
     ]),
   )
@@ -96,10 +84,9 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('before-quit', () => {
-  app.isQuitting = true
+// Closing the window quits the app, matching normal desktop app behavior
+// on Windows/Linux. macOS keeps the dock icon/process alive per platform
+// convention until the user explicitly quits (Cmd+Q).
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
 })
-
-// Keep the app (and audio playback) alive in the tray when all windows are
-// closed — the app only exits via the tray's explicit "Quit" action.
-app.on('window-all-closed', () => {})

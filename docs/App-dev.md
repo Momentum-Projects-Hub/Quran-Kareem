@@ -190,7 +190,7 @@ export async function fetchAllRadios(): Promise<Radio[]> {
 - Electron shell (`packages/desktop`): `electron/main.js` loads the Vite dev server URL (`ELECTRON_START_URL`, set by `pnpm dev`) or the built `packages/web/dist/index.html` (`pnpm start`/packaged builds) — same dev/build duality originally planned for Tauri's `devPath`/`distDir`.
 - System-tray play/pause (originally a "stretch goal") is implemented: `main.js` builds a `Tray` context menu and forwards clicks to the renderer over IPC; the renderer's `usePlayer` reports state back via `window.desktop.reportPlaybackState` (bridged through `preload.js`'s `contextBridge`, typed in `packages/web/src/desktop.d.ts`) so the tray label/tooltip stay in sync. This is a no-op on plain web — `window.desktop` is simply undefined there, so `packages/web` stays a single shared build across web and desktop.
 - Native media-key/lock-screen handling did **not** need Electron-specific code: the standard Web `MediaSession` API (`navigator.mediaSession.metadata`/`setActionHandler`, wired in `usePlayer.ts`) is picked up by Chromium — which Electron embeds — as Windows System Media Transport Controls automatically. It also works unmodified in a plain browser tab.
-- Closing the Electron window hides it rather than quitting, so playback and the tray survive in the background (§11 requires background/lock-screen playback on desktop too); `backgroundThrottling: false` on the `BrowserWindow` prevents Chromium from throttling the `<audio>` element while hidden/minimized. Quitting only happens via the tray's explicit "Quit" item.
+- Closing the Electron window quits the app (standard Windows/Linux behavior via `window-all-closed`) rather than hiding to the tray — an earlier version kept the process alive in the background after close, which was confusing since the window disappears with no obvious way back in; the tray icon still offers quick play/pause and "Quit" while the app is running, and `backgroundThrottling: false` on the `BrowserWindow` prevents Chromium from throttling the `<audio>` element while minimized (but not after the window is fully closed).
 
 ---
 
@@ -382,7 +382,7 @@ export default ShareButtons;
 - ✅ `packages/desktop` Electron shell wraps the `packages/web` build; `pnpm --filter @quran-fm/desktop dev` (hot reload) and `...start` (built output) both work.
 - ✅ System-tray play/pause toggle, kept in sync with the player via `window.desktop` IPC bridge.
 - ✅ Lock-screen/media-key controls via the Web `MediaSession` API (works because Electron embeds Chromium — no native code needed).
-- ✅ Background playback: closing the window hides it instead of quitting; `backgroundThrottling: false` keeps the stream decoding while hidden.
+- ✅ Background playback while minimized: `backgroundThrottling: false` keeps the stream decoding while hidden/unfocused; closing the window quits the app (standard behavior — no hide-to-tray-on-close).
 - ⚠️ Not verified in this session: an actual packaged Windows installer (`pnpm --filter @quran-fm/desktop dist`) and live audio playback in the Electron window — see §12 for why (Electron's binary download was corrupted in this sandboxed dev environment). `electron/icon.png` is a 1x1 placeholder pending real branding.
 
 **Phase 3 — Mobile** ✅ code done, ⚠️ unverified on device (see §12)

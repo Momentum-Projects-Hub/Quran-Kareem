@@ -122,6 +122,10 @@ This runs `build:web` (producing `packages/web/dist/`, bundled in as `extraResou
 
 `packages/desktop/electron/icon.png`/`icon.ico` already carry the station's branding; a macOS `.icns` variant is still needed before a Mac build ships, per the desktop package's README.
 
+Statistics in cloudflare: 
+https://quranfm-live.pages.dev/api/stats
+
+
 ### Mobile (Expo / React Native)
 
 `packages/mobile` wraps the same `@quran-fm/core` stream-resolution and i18n logic in an Expo app, using `react-native-track-player` for background/lock-screen audio (see [packages/mobile/README.md](../packages/mobile/README.md) and [App-dev.md §7](./App-dev.md#7-mobile-implementation-react-native--implemented-see-12)).
