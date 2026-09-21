@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "com.quranfm.cairo982.desktop",
-    "productName": "Quran FM 98.2",
+    "productName": "إذاعة القرآن الكريم من القاهرة بث مباشر",
     "directories": {
       "output": "release"
     },

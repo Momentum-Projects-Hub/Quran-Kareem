@@ -57,7 +57,7 @@ function updateTray() {
         label: isPlaying ? 'Pause' : 'Play',
         click: () => mainWindow?.webContents.send('tray:toggle-playback'),
       },
-      { label: 'Show Quran FM', click: () => mainWindow?.show() },
+      { label: 'إظهار الإذاعة', click: () => mainWindow?.show() },
       { type: 'separator' },
       {
         label: 'Quit',
@@ -68,7 +68,7 @@ function updateTray() {
       },
     ]),
   )
-  tray.setToolTip(`Quran FM 98.2 — ${isPlaying ? 'Playing' : 'Paused'}`)
+  tray.setToolTip(`إذاعة القرآن الكريم من القاهرة — ${isPlaying ? 'تشغيل' : 'إيقاف مؤقت'}`)
 }
 
 function createTray() {
