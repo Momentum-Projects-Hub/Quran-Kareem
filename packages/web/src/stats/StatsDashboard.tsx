@@ -4,7 +4,7 @@ import { StatsChart } from './StatsChart'
 import { useStats } from './useStats'
 
 export function StatsDashboard() {
-  const { t } = useLocale()
+  const { t, toggleLocale } = useLocale()
   const { data, status, last30, todayVsYesterday, refetch } = useStats()
 
   return (
@@ -12,12 +12,23 @@ export function StatsDashboard() {
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-amber-50">{t('statsTitle')}</h1>
-          <a
-            href={import.meta.env.BASE_URL}
-            className="text-sm text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white/90"
-          >
-            {t('statsBackToPlayer')}
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              href={import.meta.env.BASE_URL}
+              className="text-sm text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white/90"
+            >
+              {t('statsBackToPlayer')}
+            </a>
+            <button
+              type="button"
+              onClick={toggleLocale}
+              aria-label={t('language')}
+              title={t('language')}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-base backdrop-blur-md transition-colors hover:bg-white/15"
+            >
+              🌐
+            </button>
+          </div>
         </div>
 
         {status === 'error' && (
