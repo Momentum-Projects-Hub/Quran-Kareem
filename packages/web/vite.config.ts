@@ -28,7 +28,7 @@ export default defineConfig({
       workbox: {
         // The live audio stream is never cached; only the app shell is precached
         // so the player UI (and its lock-screen controls) load reliably offline/backgrounded.
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallbackDenylist: [/^\/api/, /^\/sitemap\.xml$/, /^\/robots\.txt$/],
       },
     }),
   ],
