@@ -3,6 +3,7 @@ import { usePlayer } from './usePlayer'
 import { EqualizerBars } from './EqualizerBars'
 import { OfflineLinks } from './OfflineLinks'
 import { ShareButtons } from './ShareButtons'
+import { StationInfo } from './StationInfo'
 
 export function EnhancedPlayer() {
   const { t, locale, toggleLocale } = useLocale()
@@ -12,7 +13,7 @@ export function EnhancedPlayer() {
     state === 'loading' ? t('loading') : state === 'retrying' ? t('retrying') : state === 'playing' ? t('stationTagline') : t('stationTagline')
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 p-4">
+    <div className="min-h-screen w-full flex flex-col items-center bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 px-4 py-16">
       <button
         type="button"
         onClick={toggleLocale}
@@ -27,7 +28,7 @@ export function EnhancedPlayer() {
         <div className="flex flex-col items-center text-center">
           <img
             src={`${import.meta.env.BASE_URL}station-artwork.svg`}
-            alt={station.name[locale]}
+            alt={t('stationLogoAlt')}
             className="h-32 w-32 rounded-2xl shadow-lg"
             width={128}
             height={128}
@@ -55,6 +56,8 @@ export function EnhancedPlayer() {
           <ShareButtons />
         </div>
       </div>
+
+      <StationInfo />
     </div>
   )
 }

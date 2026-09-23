@@ -20,5 +20,12 @@
   "statsRetry": "Retry",
   "statsEmpty": "No visits recorded yet",
   "statsVsYesterday": "vs. yesterday",
-  "statsBackToPlayer": "Back to player"
+  "statsBackToPlayer": "Back to player",
+  "stationLogoAlt": "Quran FM 98.2 Cairo station logo",
+  "infoHistoryTitle": "About Quran FM 98.2 — Cairo",
+  "infoHistoryBody": "Egypt's Quran Radio was launched in 1964 as a specialized station under Egyptian Radio and Television, dedicated to broadcasting Quran recitation and commentary around the clock. It broadcasts from Cairo, reaching most of Egypt's governorates and parts of neighboring countries.",
+  "infoFrequencyTitle": "Frequency & Reception",
+  "infoFrequencyBody": "You can tune in to Quran Radio on FM 98.2 MHz across Greater Cairo and most of Egypt, or listen to the live stream online from anywhere in the world.",
+  "infoProgramsTitle": "Programs & Recitations",
+  "infoProgramsBody": "The station airs live and recorded recitations by renowned reciters, Quranic commentary (tafsir) and hadith programs, along with religious segments, fatwas, and the five daily prayer calls on Cairo time."
 }
