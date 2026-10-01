@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { createStreamResolver, PRIMARY_STREAM, type Locale, type StreamResolver, type StreamState } from '@quran-fm/core'
 import { createHtmlAudioAdapter } from './audioAdapter'
 
-/** Interactions that grant the page user activation, so a blocked autoplay can start. */
-const GESTURE_EVENTS = ['pointerdown', 'keydown', 'touchend'] as const
+/**
+ * Interactions that grant the page user activation, so a blocked autoplay can
+ * start. Not pointerdown/touchstart: on phones and iPads those don't count, and
+ * reacting to them would use up the tap on a play() the browser refuses.
+ */
+const GESTURE_EVENTS = ['touchend', 'click', 'keydown'] as const
 
 export interface UsePlayerResult {
   state: StreamState
