@@ -1,6 +1,6 @@
 import type { AudioAdapter } from '@quran-fm/core';
-import { PRIMARY_STREAM, type Locale } from '@quran-fm/core';
-import TrackPlayer, { Capability, Event, State } from 'react-native-track-player';
+import { isHlsUrl, PRIMARY_STREAM, type Locale } from '@quran-fm/core';
+import TrackPlayer, { Capability, Event, State, TrackType } from 'react-native-track-player';
 
 let setupDone: Promise<void> | null = null;
 
@@ -66,6 +66,7 @@ export function createTrackPlayerAdapter(locale: Locale): AudioAdapter {
             await TrackPlayer.add({
               id: PRIMARY_STREAM.id,
               url,
+              type: isHlsUrl(url) ? TrackType.HLS : TrackType.Default,
               title: PRIMARY_STREAM.name[locale],
               artist: 'Quran FM 98.2',
               artwork: require('../../assets/station-artwork.png'),

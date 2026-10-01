@@ -7,19 +7,36 @@ export interface Station {
   id: string;
   name: StationName;
   /**
-   * 302-redirects to a short-lived tokenized RadioJar edge node (rj-ttl=5s).
-   * DO NOT resolve-and-cache the redirect target — always hit this URL fresh
-   * and let the HTTP client follow the redirect on every (re)connect.
-   * Verified live against holyquranradio.com & surahquran.com embeds — see docs/App-dev.md §0.
+   * Stream URLs in priority order. The resolver plays the first one that works
+   * and fails over to the next; always hit these fresh on every (re)connect and
+   * never resolve-and-cache a redirect target.
    */
-  url: string;
+  urls: string[];
 }
+
+/**
+ * Official Egyptian Quran Radio live stream (HLS), taken from the `radio_stream`
+ * entry on misrquran.gov.eg. Its CDN sends CORS headers, so browsers can play it
+ * directly via hls.js / native HLS.
+ */
+export const OFFICIAL_HLS_STREAM_URL =
+  'https://service.webvideocore.net/CL1olYogIrDWvwqiIKK7eCxOS4PStqG9DuEjAr2ZjZQtvS3d4y9r0cvRhvS17SGN/a_7a4vuubc6mo8.m3u8';
+
+/**
+ * 302-redirects to a short-lived tokenized RadioJar edge node (rj-ttl=5s).
+ * Verified live against holyquranradio.com & surahquran.com embeds — see docs/App-dev.md §0.
+ */
+export const RADIOJAR_STREAM_URL = 'https://stream.radiojar.com/8s5u5tpdtwzuv';
 
 export const PRIMARY_STREAM: Station = {
   id: 'quran-fm-982-cairo',
   name: { ar: 'إذاعة القرآن الكريم من القاهرة', en: 'Quran FM 98.2 — Cairo' },
-  url: 'https://stream.radiojar.com/8s5u5tpdtwzuv',
+  urls: [OFFICIAL_HLS_STREAM_URL, RADIOJAR_STREAM_URL],
 };
+
+export function isHlsUrl(url: string): boolean {
+  return /\.m3u8($|\?)/i.test(url);
+}
 
 export interface ExternalListenLink {
   label: string;

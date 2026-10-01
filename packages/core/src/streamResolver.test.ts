@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createStreamResolver, type AudioAdapter, type StreamState } from './streamResolver.js';
+import { OFFICIAL_HLS_STREAM_URL, RADIOJAR_STREAM_URL, type Station } from './streams.js';
+
+const SINGLE: Station = { id: 'single', name: { ar: 'x', en: 'x' }, urls: ['https://a.example/stream'] };
 
 function flushScheduled(scheduled: Array<() => void>) {
   const toRun = scheduled.splice(0, scheduled.length);
@@ -32,6 +35,7 @@ describe('createStreamResolver', () => {
     const states: StreamState[] = [];
     const resolver = createStreamResolver({
       adapter,
+      station: SINGLE,
       onStateChange: (s) => states.push(s),
       backoffMs: [10, 20, 30],
       scheduleRetry: (fn) => scheduled.push(fn),
@@ -57,6 +61,7 @@ describe('createStreamResolver', () => {
     const states: StreamState[] = [];
     const resolver = createStreamResolver({
       adapter,
+      station: SINGLE,
       onStateChange: (s) => states.push(s),
       backoffMs: [10, 20],
       scheduleRetry: (fn) => scheduled.push(fn),
@@ -78,6 +83,7 @@ describe('createStreamResolver', () => {
     const states: StreamState[] = [];
     const resolver = createStreamResolver({
       adapter,
+      station: SINGLE,
       onStateChange: (s) => states.push(s),
       backoffMs: [10],
       scheduleRetry: (fn) => scheduled.push(fn),
@@ -92,9 +98,53 @@ describe('createStreamResolver', () => {
     expect(resolver.getState()).toBe('idle');
   });
 
-  it('getUrl returns the station URL', () => {
+  it('getUrl starts at the official stream', () => {
     const adapter: AudioAdapter = { play: vi.fn(), stop: vi.fn() };
     const resolver = createStreamResolver({ adapter });
-    expect(resolver.getUrl()).toBe('https://stream.radiojar.com/8s5u5tpdtwzuv');
+    expect(resolver.getUrl()).toBe(OFFICIAL_HLS_STREAM_URL);
+  });
+
+  it('plays the official stream first and fails over to RadioJar', async () => {
+    const adapter: AudioAdapter = {
+      play: vi.fn().mockImplementation((url: string) =>
+        url === OFFICIAL_HLS_STREAM_URL ? Promise.reject(new Error('down')) : Promise.resolve(),
+      ),
+      stop: vi.fn(),
+    };
+    const states: StreamState[] = [];
+    const resolver = createStreamResolver({ adapter, onStateChange: (s) => states.push(s) });
+
+    await resolver.play();
+
+    expect(vi.mocked(adapter.play).mock.calls.map(([url]) => url)).toEqual([OFFICIAL_HLS_STREAM_URL, RADIOJAR_STREAM_URL]);
+    expect(states).toEqual(['loading', 'playing']);
+    expect(resolver.getUrl()).toBe(RADIOJAR_STREAM_URL);
+  });
+
+  it('retries from the official stream after every source fails', async () => {
+    const adapter: AudioAdapter = { play: vi.fn().mockRejectedValue(new Error('fail')), stop: vi.fn() };
+    const scheduled: Array<() => void> = [];
+    const states: StreamState[] = [];
+    const resolver = createStreamResolver({
+      adapter,
+      onStateChange: (s) => states.push(s),
+      backoffMs: [10],
+      scheduleRetry: (fn) => scheduled.push(fn),
+    });
+
+    await resolver.play();
+    expect(states).toEqual(['loading', 'retrying']);
+    expect(resolver.getUrl()).toBe(OFFICIAL_HLS_STREAM_URL);
+
+    flushScheduled(scheduled);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(vi.mocked(adapter.play).mock.calls.map(([url]) => url)).toEqual([
+      OFFICIAL_HLS_STREAM_URL,
+      RADIOJAR_STREAM_URL,
+      OFFICIAL_HLS_STREAM_URL,
+      RADIOJAR_STREAM_URL,
+    ]);
+    expect(states).toEqual(['loading', 'retrying', 'offline']);
   });
 });

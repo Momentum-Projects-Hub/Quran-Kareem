@@ -8,7 +8,7 @@ function mockPlayerState(state: 'idle' | 'playing' | 'offline') {
   vi.spyOn(usePlayerModule, 'usePlayer').mockReturnValue({
     state,
     isPlaying: state === 'playing',
-    station: { id: 'quran-fm-982-cairo', name: { ar: 'إذاعة القرآن الكريم من القاهرة', en: 'Quran FM 98.2 — Cairo' }, url: 'https://stream.radiojar.com/8s5u5tpdtwzuv' },
+    station: { id: 'quran-fm-982-cairo', name: { ar: 'إذاعة القرآن الكريم من القاهرة', en: 'Quran FM 98.2 — Cairo' }, urls: ['https://stream.radiojar.com/8s5u5tpdtwzuv'] },
     toggle: vi.fn(),
   })
 }
