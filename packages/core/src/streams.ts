@@ -27,6 +27,8 @@ export interface ExternalListenLink {
 }
 
 export const EXTERNAL_LISTEN_LINKS: ExternalListenLink[] = [
+  // Official Egyptian Quran Radio site — first choice when our stream is down.
+  { label: 'Misr Quran (Official)', url: 'https://s.misrquran.gov.eg/EabeT3p' },
   { label: 'Holy Quran Radio', url: 'https://www.holyquranradio.com/' },
   { label: 'Surah Quran (Cairo)', url: 'https://surahquran.com/Radio-Quran-Cairo.html' },
   { label: 'Radio Garden', url: 'https://radio.garden/listen/quran-fm-98-2-idhaet-alqran-alkrym/GQxvGBNK' },

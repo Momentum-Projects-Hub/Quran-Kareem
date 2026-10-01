@@ -22,6 +22,9 @@ describe('EnhancedPlayer', () => {
       </LocaleProvider>,
     )
 
+    const misrQuran = screen.getByRole('link', { name: 'Misr Quran (Official)' })
+    expect(misrQuran).toHaveAttribute('href', 'https://s.misrquran.gov.eg/EabeT3p')
+    expect(screen.getAllByRole('link')[0]).toBe(misrQuran)
     expect(screen.getByText('Holy Quran Radio')).toBeInTheDocument()
     expect(screen.getByText('Surah Quran (Cairo)')).toBeInTheDocument()
     expect(screen.getByText('Radio Garden')).toBeInTheDocument()

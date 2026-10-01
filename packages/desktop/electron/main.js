@@ -19,10 +19,10 @@ function resolveIndexHtml() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 420,
-    height: 680,
-    minWidth: 360,
-    minHeight: 560,
+    width: 1000,
+    height: 760,
+    minWidth: 380,
+    minHeight: 600,
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {

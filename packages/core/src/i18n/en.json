@@ -1,6 +1,8 @@
 {
   "appName": "Quran FM 98.2 — Cairo",
   "stationTagline": "Live broadcast — Cairo 98.2",
+  "liveBadge": "Live",
+  "liveSubtitle": "Live Broadcast",
   "play": "Play",
   "pause": "Pause",
   "loading": "Connecting...",
@@ -10,6 +12,7 @@
   "language": "العربية",
   "share": "Earn the reward... share this website",
   "shareMore": "More share options",
+  "linkCopied": "Link copied",
   "statsTitle": "Listener Stats",
   "statsToday": "Today",
   "statsLast7Days": "Last 7 Days",

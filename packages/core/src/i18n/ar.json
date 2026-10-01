@@ -1,6 +1,8 @@
 {
   "appName": "إذاعة القرآن الكريم من القاهرة",
   "stationTagline": "بث مباشر — القاهرة 98.2",
+  "liveBadge": "البث المباشر",
+  "liveSubtitle": "البث المباشر",
   "play": "تشغيل",
   "pause": "إيقاف",
   "loading": "جارٍ الاتصال...",
@@ -10,6 +12,7 @@
   "language": "English",
   "share": "كن شريكاً في الأجر.. شارك الموقع",
   "shareMore": "المزيد من خيارات المشاركة",
+  "linkCopied": "تم نسخ الرابط",
   "statsTitle": "إحصائيات المستمعين",
   "statsToday": "اليوم",
   "statsLast7Days": "آخر 7 أيام",

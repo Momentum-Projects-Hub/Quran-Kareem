@@ -16,7 +16,7 @@ export function ShareButtons() {
   }
 
   return (
-    <div className="mt-6 flex flex-col items-center gap-3">
+    <div id="share" className="mt-8 flex flex-col items-center gap-3">
       <span className="text-sm text-white/60">{t('share')}</span>
 
       <div className="flex items-center gap-3">
