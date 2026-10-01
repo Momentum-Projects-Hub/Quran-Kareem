@@ -20,10 +20,21 @@ export interface AudioAdapter {
   stop(): void;
 }
 
+/**
+ * True when playback was refused because the platform requires a user gesture
+ * first (browser autoplay policy rejects HTMLMediaElement.play() with a
+ * NotAllowedError). That is not a broken stream, so it must not trigger failover.
+ */
+export function isAutoplayBlockedError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'NotAllowedError';
+}
+
 export interface StreamResolverOptions {
   adapter: AudioAdapter;
   station?: Station;
   onStateChange?: (state: StreamState) => void;
+  /** Called when the platform blocked playback pending a user gesture; the resolver goes back to idle. */
+  onAutoplayBlocked?: () => void;
   /** Overridable for tests; defaults to RETRY_BACKOFF_MS */
   backoffMs?: number[];
   /** Overridable for tests; defaults to global setTimeout */
@@ -42,6 +53,7 @@ export function createStreamResolver(options: StreamResolverOptions): StreamReso
     adapter,
     station = PRIMARY_STREAM,
     onStateChange,
+    onAutoplayBlocked,
     backoffMs = RETRY_BACKOFF_MS,
     scheduleRetry = (fn, delayMs) => setTimeout(fn, delayMs),
   } = options;
@@ -64,8 +76,17 @@ export function createStreamResolver(options: StreamResolverOptions): StreamReso
       if (stopped) return;
       attempt = 0;
       setState('playing');
-    } catch {
+    } catch (err) {
       if (stopped) return;
+      if (isAutoplayBlockedError(err)) {
+        // Every source would be refused the same way, so wait for a gesture instead.
+        attempt = 0;
+        urlIndex = 0;
+        adapter.stop();
+        setState('idle');
+        onAutoplayBlocked?.();
+        return;
+      }
       if (urlIndex < station.urls.length - 1) {
         // Fail over to the next source straight away.
         urlIndex += 1;

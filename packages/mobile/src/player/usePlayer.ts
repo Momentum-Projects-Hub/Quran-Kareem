@@ -13,6 +13,7 @@ export interface UsePlayerResult {
 export function usePlayer(locale: Locale): UsePlayerResult {
   const [state, setState] = useState<StreamState>('idle');
   const resolverRef = useRef<StreamResolver | null>(null);
+  const hasAutoplayedRef = useRef(false);
 
   useEffect(() => {
     const resolver = createStreamResolver({
@@ -20,6 +21,12 @@ export function usePlayer(locale: Locale): UsePlayerResult {
       onStateChange: setState,
     });
     resolverRef.current = resolver;
+
+    // Start the broadcast when the app opens — once, not on every language switch.
+    if (!hasAutoplayedRef.current) {
+      hasAutoplayedRef.current = true;
+      void resolver.play();
+    }
 
     return () => {
       resolver.stop();

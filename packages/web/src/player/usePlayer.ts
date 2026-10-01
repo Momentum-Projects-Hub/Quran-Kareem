@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { createStreamResolver, PRIMARY_STREAM, type Locale, type StreamResolver, type StreamState } from '@quran-fm/core'
 import { createHtmlAudioAdapter } from './audioAdapter'
 
+/** Interactions that grant the page user activation, so a blocked autoplay can start. */
+const GESTURE_EVENTS = ['pointerdown', 'keydown', 'touchend'] as const
+
 export interface UsePlayerResult {
   state: StreamState
   isPlaying: boolean
@@ -14,19 +17,43 @@ export function usePlayer(locale: Locale): UsePlayerResult {
   const resolverRef = useRef<StreamResolver | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const toggleRef = useRef<() => void>(() => {})
+  const disarmGestureStartRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const audio = new Audio()
     audio.preload = 'none'
     audioRef.current = audio
 
+    // Browsers refuse sound before the visitor has interacted with the page
+    // (Chrome lets it through for sites the visitor plays often). When that
+    // happens, start on their first tap/click/key press anywhere instead.
+    const onGesture = (event: Event) => {
+      // The play button starts playback itself through toggle().
+      if (event.target instanceof Element && event.target.closest('[data-player-toggle]')) return
+      disarmGestureStart()
+      if (resolver.getState() === 'idle') void resolver.play()
+    }
+    const disarmGestureStart = () => {
+      GESTURE_EVENTS.forEach((type) => document.removeEventListener(type, onGesture, true))
+    }
+    const armGestureStart = () => {
+      disarmGestureStart()
+      GESTURE_EVENTS.forEach((type) => document.addEventListener(type, onGesture, true))
+    }
+    disarmGestureStartRef.current = disarmGestureStart
+
     const resolver = createStreamResolver({
       adapter: createHtmlAudioAdapter(audio),
       onStateChange: setState,
+      onAutoplayBlocked: armGestureStart,
     })
     resolverRef.current = resolver
 
+    // Start the broadcast as soon as the visitor lands.
+    void resolver.play()
+
     return () => {
+      disarmGestureStart()
       resolver.stop()
       audio.pause()
       audio.src = ''
@@ -50,6 +77,7 @@ export function usePlayer(locale: Locale): UsePlayerResult {
   function toggle() {
     const resolver = resolverRef.current
     if (!resolver) return
+    disarmGestureStartRef.current()
     if (isPlaying) {
       resolver.stop()
     } else {

@@ -43,6 +43,7 @@ export function LiveHero({ state, isPlaying, title, onToggle }: LiveHeroProps) {
           <Waveform active={state === 'playing'} side="start" />
           <button
             type="button"
+            data-player-toggle
             onClick={onToggle}
             disabled={busy}
             className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-emerald-950 shadow-lg ring-2 ring-amber-200/40 transition hover:from-amber-200 hover:to-amber-400 disabled:cursor-not-allowed disabled:opacity-60 sm:h-16 sm:w-16 ${isPlaying ? 'animate-pulse-ring' : ''}`}

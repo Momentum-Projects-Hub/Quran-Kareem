@@ -147,4 +147,26 @@ describe('createStreamResolver', () => {
     ]);
     expect(states).toEqual(['loading', 'retrying', 'offline']);
   });
+
+  it('goes back to idle without failing over when autoplay is blocked', async () => {
+    const blocked = Object.assign(new Error('play() needs a user gesture'), { name: 'NotAllowedError' });
+    const adapter: AudioAdapter = { play: vi.fn().mockRejectedValue(blocked), stop: vi.fn() };
+    const scheduled: Array<() => void> = [];
+    const states: StreamState[] = [];
+    const onAutoplayBlocked = vi.fn();
+    const resolver = createStreamResolver({
+      adapter,
+      onStateChange: (s) => states.push(s),
+      onAutoplayBlocked,
+      scheduleRetry: (fn) => scheduled.push(fn),
+    });
+
+    await resolver.play();
+
+    expect(adapter.play).toHaveBeenCalledTimes(1);
+    expect(states).toEqual(['loading', 'idle']);
+    expect(scheduled).toHaveLength(0);
+    expect(onAutoplayBlocked).toHaveBeenCalledTimes(1);
+    expect(resolver.getUrl()).toBe(OFFICIAL_HLS_STREAM_URL);
+  });
 });

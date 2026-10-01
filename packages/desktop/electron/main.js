@@ -30,6 +30,8 @@ function createWindow() {
       // Live radio must keep decoding/streaming while the window is minimized
       // or hidden to the tray — Chromium throttles background timers by default.
       backgroundThrottling: false,
+      // The broadcast starts as soon as the app opens, without waiting for a click.
+      autoplayPolicy: 'no-user-gesture-required',
     },
   })
 
