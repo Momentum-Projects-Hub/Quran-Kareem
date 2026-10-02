@@ -1,6 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
-import { createStreamResolver, PRIMARY_STREAM, type Locale, type StreamResolver, type StreamState } from '@quran-fm/core'
+import {
+  createStreamResolver,
+  isHlsUrl,
+  PRIMARY_STREAM,
+  type Locale,
+  type Station,
+  type StreamResolver,
+  type StreamState,
+} from '@quran-fm/core'
 import { createHtmlAudioAdapter } from './audioAdapter'
+
+/**
+ * Phones and tablets (iPadOS reports itself as a Mac, so check for touch too).
+ * Their browsers pause any media with a video track when the screen locks or the
+ * page goes to the background.
+ */
+function isMobileDevice(): boolean {
+  const ua = navigator.userAgent
+  return /Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+}
+
+/**
+ * The official HLS stream carries a 720p video track, so on mobile it stops
+ * when the device locks. There, play the audio-only MP3 stream first and keep
+ * HLS as the fallback.
+ */
+function stationForDevice(): Station {
+  if (!isMobileDevice()) return PRIMARY_STREAM
+  const audioOnly = PRIMARY_STREAM.urls.filter((url) => !isHlsUrl(url))
+  const hls = PRIMARY_STREAM.urls.filter((url) => isHlsUrl(url))
+  return { ...PRIMARY_STREAM, urls: [...audioOnly, ...hls] }
+}
 
 /**
  * Interactions that grant the page user activation, so a blocked autoplay can
@@ -48,6 +78,7 @@ export function usePlayer(locale: Locale): UsePlayerResult {
 
     const resolver = createStreamResolver({
       adapter: createHtmlAudioAdapter(audio),
+      station: stationForDevice(),
       onStateChange: setState,
       onAutoplayBlocked: armGestureStart,
     })
@@ -56,7 +87,17 @@ export function usePlayer(locale: Locale): UsePlayerResult {
     // Start the broadcast as soon as the visitor lands.
     void resolver.play()
 
+    // If the system paused the stream while the page was hidden or locked (the
+    // visitor never pressed pause), reconnect as soon as they come back.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && resolver.getState() === 'playing' && audio.paused) {
+        void resolver.play()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       disarmGestureStart()
       resolver.stop()
       audio.pause()
@@ -104,8 +145,13 @@ export function usePlayer(locale: Locale): UsePlayerResult {
         { src: `${import.meta.env.BASE_URL}station-artwork.svg`, sizes: '512x512', type: 'image/svg+xml' },
       ],
     })
-    navigator.mediaSession.setActionHandler('play', () => toggleRef.current())
-    navigator.mediaSession.setActionHandler('pause', () => toggleRef.current())
+    // Explicit play/stop rather than toggle: if the system paused the audio behind
+    // our back, the lock-screen Play button must (re)start it, not stop it.
+    navigator.mediaSession.setActionHandler('play', () => {
+      disarmGestureStartRef.current()
+      if (audioRef.current?.paused) void resolverRef.current?.play()
+    })
+    navigator.mediaSession.setActionHandler('pause', () => resolverRef.current?.stop())
     return () => {
       navigator.mediaSession.setActionHandler('play', null)
       navigator.mediaSession.setActionHandler('pause', null)
