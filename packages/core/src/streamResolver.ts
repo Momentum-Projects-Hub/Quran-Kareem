@@ -4,7 +4,7 @@ export type StreamState = 'idle' | 'loading' | 'playing' | 'retrying' | 'offline
 
 /**
  * Backoff schedule in ms between retry rounds. Each round tries every station
- * URL in priority order (official stream first, then fallbacks); only when the
+ * URL in priority order (RadioJar first, official HLS as fallback); only when the
  * whole round fails do we wait and start again from the top.
  */
 export const RETRY_BACKOFF_MS = [2000, 5000, 10000];

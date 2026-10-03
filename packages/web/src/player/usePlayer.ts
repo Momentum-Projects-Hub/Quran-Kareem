@@ -1,36 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   createStreamResolver,
-  isHlsUrl,
   PRIMARY_STREAM,
   type Locale,
-  type Station,
   type StreamResolver,
   type StreamState,
 } from '@quran-fm/core'
 import { createHtmlAudioAdapter } from './audioAdapter'
-
-/**
- * Phones and tablets (iPadOS reports itself as a Mac, so check for touch too).
- * Their browsers pause any media with a video track when the screen locks or the
- * page goes to the background.
- */
-function isMobileDevice(): boolean {
-  const ua = navigator.userAgent
-  return /Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
-}
-
-/**
- * The official HLS stream carries a 720p video track, so on mobile it stops
- * when the device locks. There, play the audio-only MP3 stream first and keep
- * HLS as the fallback.
- */
-function stationForDevice(): Station {
-  if (!isMobileDevice()) return PRIMARY_STREAM
-  const audioOnly = PRIMARY_STREAM.urls.filter((url) => !isHlsUrl(url))
-  const hls = PRIMARY_STREAM.urls.filter((url) => isHlsUrl(url))
-  return { ...PRIMARY_STREAM, urls: [...audioOnly, ...hls] }
-}
 
 /**
  * Interactions that grant the page user activation, so a blocked autoplay can
@@ -78,7 +54,7 @@ export function usePlayer(locale: Locale): UsePlayerResult {
 
     const resolver = createStreamResolver({
       adapter: createHtmlAudioAdapter(audio),
-      station: stationForDevice(),
+      station: PRIMARY_STREAM,
       onStateChange: setState,
       onAutoplayBlocked: armGestureStart,
     })

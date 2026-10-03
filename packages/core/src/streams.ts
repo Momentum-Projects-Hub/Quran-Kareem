@@ -31,7 +31,7 @@ export const RADIOJAR_STREAM_URL = 'https://stream.radiojar.com/8s5u5tpdtwzuv';
 export const PRIMARY_STREAM: Station = {
   id: 'quran-fm-982-cairo',
   name: { ar: 'إذاعة القرآن الكريم من القاهرة', en: 'Quran FM 98.2 — Cairo' },
-  urls: [OFFICIAL_HLS_STREAM_URL, RADIOJAR_STREAM_URL],
+  urls: [RADIOJAR_STREAM_URL, OFFICIAL_HLS_STREAM_URL],
 };
 
 export function isHlsUrl(url: string): boolean {
